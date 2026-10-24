@@ -12,6 +12,7 @@ import { getRuntimeDefaults } from './runtime.ts';
 import { acquireDataDirectoryLock } from './data-lock.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FeatureTests } from './feature-tests.ts';
+import { FeatureCompletions } from './feature-completions.ts';
 
 function port(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -55,11 +56,13 @@ export async function startServers() {
   try { await featureBoards.initialize(); } catch (error) { await dataLock.release(); throw error; }
   const featureTests = new FeatureTests(featureBoards, path.resolve(process.env.DEFINE_PRETTY_SOURCE_DATA_DIR || '.data'), previewOrigin);
   try { await featureTests.initialize(); } catch (error) { await dataLock.release(); throw error; }
+  const featureCompletions = new FeatureCompletions(featureBoards, store);
+  try { await featureCompletions.initialize(); } catch (error) { await dataLock.release(); throw error; }
   const runner = new Runner({ store, previewOrigin });
   const generator = new SpecGenerator(store);
   const comparisons = new VisualComparisons(store, consolePort);
   const highlights = new DimensionHighlights(store, comparisons);
-  const app = createApp({ featureTests, featureBoards, highlights, comparisons, store, runner, generator, consolePort, previewOrigin, config, runtime });
+  const app = createApp({ featureCompletions, featureTests, featureBoards, highlights, comparisons, store, runner, generator, consolePort, previewOrigin, config, runtime });
   const server = createServer(app);
   const previewServer = createServer(createPreviewApp(store, consolePort, featureTests));
   let vite: Awaited<ReturnType<typeof import('vite')['createServer']>> | undefined;
@@ -83,6 +86,7 @@ export async function startServers() {
     await runner.shutdown();
     await generator.shutdown();
     await featureTests.shutdown();
+    await featureCompletions.shutdown();
     await featureBoards.shutdown();
     await dataLock.release();
     throw error;
@@ -97,6 +101,7 @@ export async function startServers() {
       await runner.shutdown();
       await generator.shutdown();
       await featureTests.shutdown();
+      await featureCompletions.shutdown();
       await featureBoards.shutdown();
       await vite?.close();
       await Promise.all([close(server), close(previewServer)]);

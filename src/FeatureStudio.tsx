@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { FlaskConical, Upload, Sparkles, Plus, Check, Pencil, Download, Copy, X, SlidersHorizontal, MousePointer2, Image as ImageIcon, RotateCcw, ArrowUpRight, LoaderCircle, CheckCheck, Square, Trash2, FileText } from 'lucide-react';
 import type { Bootstrap, ModelConfig, ReferenceAsset } from '../shared/types';
+import type { FeatureCompletion } from '../shared/feature-completion';
 import { featureInstruction, featureImplementation, featureSections, selectedFeatures, type FeatureBoard, type FeatureCard, type FeatureRegion } from '../shared/feature-board';
 import { api, errorMessage, setApiToken } from './api';
 import { exportFeatureBoard, loadReference } from './feature-export';
@@ -19,6 +20,8 @@ export default function FeatureStudio() {
   const [config, setConfig] = useState<ModelConfig>();
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [active, setActive] = useState(''), [editor, setEditor] = useState<FeatureCard>(), [locating, setLocating] = useState(false), [drag, setDrag] = useState<FeatureRegion>();
+  const [completion,setCompletion]=useState<FeatureCompletion>(), [completionStarting,setCompletionStarting]=useState(false), [completionCancelling,setCompletionCancelling]=useState(false), [regionConfirmed,setRegionConfirmed]=useState(true);
+  const completing=completionStarting || completion?.status==='running';
   const [settings, setSettings] = useState(false), [evidence, setEvidence] = useState('');
   const [exported, setExported] = useState<{ url: string; width: number; height: number }>();
   const [aspect, setAspect] = useState(4 / 3), [imageReady, setImageReady] = useState(false);
@@ -27,11 +30,12 @@ export default function FeatureStudio() {
   const cardsRef = useRef(new Map<string, HTMLElement>()), start = useRef<{ x: number; y: number } | undefined>(undefined);
   const exportedRef = useRef('');
   const validation = useFeatureTests(board, bootstrap);
-  const locked = busy || validation.busy || saving || board?.status === 'running';
+  const locked = busy || validation.busy || saving || completing || board?.status === 'running';
   const view = board && editor ? { ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) } : board;
   const selected = view ? selectedFeatures(view) : [];
 
   function adopt(next: FeatureBoard) { setBoard(next); setBoards(old => [next, ...old.filter(b => b.id !== next.id)]); localStorage.setItem('define-pretty-feature-board', next.id); }
+  function closeEditor() { if(completing)return;setEditor(undefined);setCompletion(undefined);localStorage.removeItem('define-pretty-card-completion'); }
   async function perform(fn: () => Promise<void>) { setError(''); setBusy(true); try { await fn(); } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); } }
   useEffect(() => { let live = true; void (async () => {
     try {
@@ -43,8 +47,26 @@ export default function FeatureStudio() {
       setConfig({ ...defaults, ...(typeof preference.model === 'string' ? { model: preference.model } : {}), ...(typeof preference.reasoningEffort === 'string' ? { reasoningEffort: preference.reasoningEffort } : {}) });
       const list = await api<FeatureBoard[]>('/feature-boards'); if (!live) return;
       setBoards(list); const previous = list.find(b => b.id === localStorage.getItem('define-pretty-feature-board')) || list[0]; if (previous) setBoard(previous);
+      const pending=localStorage.getItem('define-pretty-card-completion');
+      if(pending) { try {
+        const saved=JSON.parse(pending), job=await api<FeatureCompletion>(`/feature-completions/${saved.id}`);
+        if(!live)return;
+        const target=list.find(b=>b.id===job.boardId);
+        if(target && target.revision===job.revision && target.cards.some(c=>c.id===job.cardId) && saved.draft?.id===job.cardId) {
+          adopt(target);setEditor(saved.draft);setActive(job.cardId);setRegionConfirmed(true);setCompletion(job);
+          if(job.status==='completed'&&job.result)setEditor({...saved.draft,...job.result,adaptation:''});
+          else if(job.error)setError(job.error);
+        }else {localStorage.removeItem('define-pretty-card-completion');setError('卡片已更新，未自动恢复旧的补全草稿。');}
+      }catch(cause){localStorage.removeItem('define-pretty-card-completion');setError(errorMessage(cause));} }
     } catch(cause) { if (live) setError(errorMessage(cause)); }
   })(); return () => { live = false; }; }, []);
+  useEffect(()=>{if(!completion || completion.status!=='running')return;let live=true;
+    const poll=()=>api<FeatureCompletion>(`/feature-completions/${completion.id}`).then(next=>{if(!live)return;setCompletion(next);
+      if(next.status==='completed'&&next.result){setEditor(current=>current?.id===next.cardId?{...current,...next.result,adaptation:''}:current);setNotice('AI 已补全，请检查后保存。');}
+      else if(next.error)setError(next.error);
+    }).catch(cause=>{if(live)setError(errorMessage(cause));});
+    void poll();const timer=setInterval(()=>void poll(),2000);return()=>{live=false;clearInterval(timer);};
+  },[completion?.id,completion?.status]);
   useEffect(() => { if (!board || board.status !== 'running') return; let live = true;
     const timer = setInterval(() => { void api<FeatureBoard>(`/feature-boards/${board.id}`).then(next => { if (live) adopt(next); }).catch(cause => { if(live) setError(errorMessage(cause)); }); }, 2000);
     return () => { live = false; clearInterval(timer); };
@@ -56,7 +78,7 @@ export default function FeatureStudio() {
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 5000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => { if(config) localStorage.setItem('define-pretty-feature-config', JSON.stringify({ model: config.model, reasoningEffort: config.reasoningEffort })); }, [config]);
   useEffect(() => () => { if (exportedRef.current) URL.revokeObjectURL(exportedRef.current); }, []);
-  useEffect(() => { const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setLocating(false); setDrag(undefined); start.current = undefined; if (!locating) { setEditor(undefined); setSettings(false); setEvidence(''); closeExport(); } } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [locating]);
+  useEffect(() => { const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !completing) { setLocating(false); setDrag(undefined); start.current = undefined; if (!locating) { closeEditor(); setSettings(false); setEvidence(''); closeExport(); } } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [locating,completing]);
 
   const dialogOpen = (!!editor && !locating) || settings || !!evidence || !!exported;
   useEffect(() => {
@@ -111,24 +133,33 @@ export default function FeatureStudio() {
     adopt(await api<FeatureBoard>(`/feature-boards/${next.id}/generate`, { method: 'POST' }));
   }); }
   function toggle(card: FeatureCard) { if (board && !locked && !editor) void save({ ...board, cards: board.cards.map(c => c.id === card.id ? { ...c, selected: !c.selected } : c) }); }
+  async function completeCard() {
+    if(!board||!editor||!config||completing||!regionConfirmed)return;
+    setCompletionStarting(true);setError('');
+    const draft=structuredClone(editor);
+    try { const job=await api<FeatureCompletion>(`/feature-boards/${board.id}/complete-card`,{method:'POST',body:JSON.stringify({cardId:draft.id,revision:board.revision,title:draft.title,region:draft.region,config})});
+      localStorage.setItem('define-pretty-card-completion',JSON.stringify({id:job.id,draft}));setCompletion(job);
+    }catch(cause){setError(errorMessage(cause));}finally{setCompletionStarting(false);}
+  }
+  async function cancelCompletion() {if(!completion||completionCancelling)return;setCompletionCancelling(true);try{const next=await api<FeatureCompletion>(`/feature-completions/${completion.id}/cancel`,{method:'POST'});setCompletion(next);if(next.status==='completed'&&next.result)setEditor(current=>current?.id===next.cardId?{...current,...next.result,adaptation:''}:current);}catch(cause){setError(errorMessage(cause));}finally{setCompletionCancelling(false);} }
   async function addCard() { if (!board) return; const card: FeatureCard = { id: crypto.randomUUID(), title: '我的设计特征', description: '', effect: '', instruction: '说明具体实现规则，以及什么情况下可以怎样调整。', adaptation: '', applicability: '', selected: false, application: '', region: { x: .25, y: .25, width: .5, height: .5 } };
-    if (await save({ ...board, cards: [...board.cards, card] })) { setEditor(card); setActive(card.id); }
+    if (await save({ ...board, cards: [...board.cards, card] })) { setEditor(card); setCompletion(undefined);setRegionConfirmed(false);setLocating(true);setActive(card.id);diagram.current?.scrollIntoView({block:'center',behavior:'smooth'}); }
   }
   function position(e: PointerEvent) { const box = picture.current!.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)), y: Math.max(0, Math.min(1, (e.clientY - box.top) / box.height)) }; }
   function pointerDown(e: PointerEvent<SVGSVGElement>) { if (!locating || !editor) return; e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); start.current = position(e); setDrag(undefined); }
   function pointerMove(e: PointerEvent<SVGSVGElement>) { if (!start.current) return; const p = position(e), s = start.current; setDrag({ x: Math.min(p.x,s.x), y: Math.min(p.y,s.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }
-  function pointerUp(e: PointerEvent<SVGSVGElement>) { if (!start.current || !editor) return; const p = position(e), s = start.current; const r = { x: Math.min(p.x,s.x), y: Math.min(p.y,s.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }; start.current = undefined; setDrag(undefined); if (r.width < .01 || r.height < .01) { setNotice('请拖出一个更大的矩形区域。'); return; } setEditor({ ...editor, region: r }); setLocating(false); }
+  function pointerUp(e: PointerEvent<SVGSVGElement>) { if (!start.current || !editor) return; const p = position(e), s = start.current; const r = { x: Math.min(p.x,s.x), y: Math.min(p.y,s.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }; start.current = undefined; setDrag(undefined); if (r.width < .01 || r.height < .01) { setNotice('请拖出一个更大的矩形区域。'); return; } setEditor({ ...editor, region: r }); setRegionConfirmed(true);setLocating(false); }
   function closeExport() { if(exportedRef.current) URL.revokeObjectURL(exportedRef.current); exportedRef.current = ''; setExported(undefined); }
   async function previewExport() { if (!board) return; await perform(async () => { const result = await exportFeatureBoard(board); closeExport(); const url = URL.createObjectURL(result.blob); exportedRef.current = url; setExported({ url, width: result.width, height: result.height }); }); }
   async function copyInstruction() { if (!board) return; try { await navigator.clipboard.writeText(featureInstruction(board)); setNotice('配套指令已复制，和导出图片一起发给 AI 即可。'); } catch { setEvidence(featureInstruction(board)); } }
   function renderCard(card: FeatureCard, index: number) {
     const focused = active === card.id;
     return <article key={card.id} style={{ order: index }} ref={el => { if(el) cardsRef.current.set(card.id, el); else cardsRef.current.delete(card.id); }} className={`feature-card ${card.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`} onMouseEnter={() => setActive(card.id)} onMouseLeave={() => setActive('')} onFocus={() => setActive(card.id)}>
-      <div className="feature-card-head"><span className="feature-number">{index + 1}</span><label><input type="checkbox" checked={card.selected} disabled={locked || !!editor} onChange={() => toggle(card)} /><span>{card.title}</span></label><button className="feature-icon" aria-label={`编辑${card.title}`} disabled={locked} onClick={() => { setEditor({ ...structuredClone(card), instruction: featureImplementation(card), adaptation: '' }); setActive(card.id); }}><Pencil size={15}/></button></div>
+      <div className="feature-card-head"><span className="feature-number">{index + 1}</span><label><input type="checkbox" checked={card.selected} disabled={locked || !!editor} onChange={() => toggle(card)} /><span>{card.title}</span></label><button className="feature-icon" aria-label={`编辑${card.title}`} disabled={locked} onClick={() => { setEditor({ ...structuredClone(card), instruction: featureImplementation(card), adaptation: '' }); setCompletion(undefined);setRegionConfirmed(true);setActive(card.id); }}><Pencil size={15}/></button></div>
       <Crop card={card} url={board!.reference.url} aspect={aspect}/>
       <dl className="feature-rules">{featureSections(card).map(section => <div key={section.label}><dt>{section.label}</dt><dd>{section.text}</dd></div>)}</dl>
       {card.description && <details className="feature-source"><summary>查看图中依据</summary><p>{card.description}</p></details>}
-      <div className="feature-card-foot"><span>{card.selected ? <><Check size={13}/>已选入参考图</> : '勾选以借鉴这个特征'}</span><button disabled={locked} onClick={() => { setEditor({ ...structuredClone(card), instruction: featureImplementation(card), adaptation: '' }); setActive(card.id); }}>编辑要求 <ArrowUpRight size={13}/></button></div>
+      <div className="feature-card-foot"><span>{card.selected ? <><Check size={13}/>已选入参考图</> : '勾选以借鉴这个特征'}</span><button disabled={locked} onClick={() => { setEditor({ ...structuredClone(card), instruction: featureImplementation(card), adaptation: '' }); setCompletion(undefined);setRegionConfirmed(true);setActive(card.id); }}>编辑要求 <ArrowUpRight size={13}/></button></div>
     </article>;
   }
 
@@ -161,16 +192,16 @@ export default function FeatureStudio() {
       <FeatureValidation state={validation}/>
     </main>
     <footer className="feature-selection"><div><span className="feature-selected-count">{selected.length.toString().padStart(2,'0')}</span><div><strong>{selected.length ? '个特征已选中' : '选择你想借鉴的特征'}</strong><span>{selected.length ? selected.map(c => c.title).join(' · ') : '导出图片只包含所选卡片及其标注'}</span></div></div><div><button className="feature-button" disabled={!selected.length || locked || !!editor} onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady} onClick={() => void previewExport()}>{busy ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>}预览并导出图片</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady || !validation.ready || validation.running} onClick={() => void validation.start()}><FlaskConical size={16}/>{validation.busy ? '准备测试…' : validation.running ? '测试进行中' : '测试所选设计'}</button></div></footer>
-    {editor && !locating && <div className="feature-overlay" onMouseDown={e => { if(e.target === e.currentTarget) setEditor(undefined); }}><section className="feature-drawer" role="dialog" aria-modal="true" aria-label="编辑特征卡片"><div className="feature-dialog-head"><div><small>FEATURE DETAILS</small><h2>编辑这个特征</h2></div><button aria-label="关闭编辑" onClick={() => setEditor(undefined)}><X/></button></div><form onSubmit={e => { e.preventDefault(); if(board) void save({ ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) }).then(ok => { if(ok) setEditor(undefined); }); }}>
+    {editor && !locating && <div className="feature-overlay" onMouseDown={e => { if(e.target === e.currentTarget) closeEditor(); }}><section className="feature-drawer" role="dialog" aria-modal="true" aria-label="编辑特征卡片"><div className="feature-dialog-head"><div><small>FEATURE DETAILS</small><h2>编辑这个特征</h2></div><button aria-label="关闭编辑" disabled={completing} onClick={closeEditor}><X/></button></div><div className="feature-ai-complete"><div><strong>根据选区与一句话特征补全</strong><p>AI 生成图中依据和下方三段内容，检查后再保存。重新补全会替换表单中的这些内容。</p><small>使用生成设置：{config?.model} · {config?.reasoningEffort}</small></div>{completing ? <><span role="status"><LoaderCircle className="spin" size={15}/>正在补全…</span><button className="feature-button" disabled={!completion || completionStarting || completionCancelling} onClick={()=>void cancelCompletion()}>取消补全</button></> : <button className="feature-button primary" disabled={saving || !config || !bootstrap?.runtime.authenticated || !imageReady || !regionConfirmed || !editor.title.trim() || editor.title.trim()==='我的设计特征'} onClick={()=>void completeCard()}><Sparkles size={15}/>AI 补全</button>}{!regionConfirmed&&<p>请先在参考图上框选区域。</p>}{completion?.status==='completed'&&<p role="status">已填入补全草稿，请检查并保存。</p>}{completion?.error&&<p role="alert">{completion.error}</p>}</div><form onSubmit={e => { e.preventDefault(); if(board && !completing) void save({ ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) }).then(ok => { if(ok) closeEditor(); }); }}><fieldset disabled={completing || saving}>
       <label>一句话特征 <span>说明某处设计最值得借鉴的做法</span><input autoFocus value={editor.title} maxLength={60} required onChange={e => setEditor({ ...editor, title: e.target.value })}/></label>
       <label>图中依据 <span>只记录可见的参考特征</span><textarea value={editor.description} maxLength={240} onChange={e => setEditor({ ...editor, description: e.target.value })}/></label>
       <label>1．带来什么效果 <span>解释突出什么、弱化什么，帮助判断是否需要</span><textarea value={editor.effect || ''} maxLength={160} placeholder="例如：浅色底块能区分入口，又不会像深色大按钮那样抢眼。" onChange={e => setEditor({ ...editor, effect: e.target.value })}/></label>
       <label>2．怎么实现 <span>逐条说明设计关系，以及什么情况下可以怎样调整</span><textarea value={editor.instruction} maxLength={1000} required rows={8} placeholder="例如：同组入口使用统一尺寸和间距；空间不足时可以横排或换行，仍与主要内容留出分隔。" onChange={e => setEditor({ ...editor, instruction: e.target.value })}/></label>
       <label>3．适合用在哪里 <span>说明适用的组件、内容和不适用条件</span><textarea value={editor.applicability || ''} maxLength={200} placeholder="例如：适合少量快捷入口；需要长文字说明时，使用带文字的列表，不强行改成图标。" onChange={e => setEditor({ ...editor, applicability: e.target.value })}/></label>
       <label>应用到我的哪里 <span>选填</span><input placeholder="例如：任务列表卡片 / 顶部导航" maxLength={200} value={editor.application} onChange={e => setEditor({ ...editor, application: e.target.value })}/></label>
-      <div className="feature-location-editor"><Crop card={editor} url={board!.reference.url} aspect={aspect}/><button type="button" className="feature-button" onClick={() => { setLocating(true); setActive(editor.id); diagram.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }}><MousePointer2 size={15}/>在参考图上重新框选</button><details><summary>精确调整定位（百分比）</summary><div className="feature-region-inputs">{(['x','y','width','height'] as const).map(key => <label key={key}>{{ x:'左', y:'上', width:'宽', height:'高' }[key]}<input type="number" min={key==='x'||key==='y'?0:0.1} max="100" step="0.1" value={Math.round(editor.region[key]*1000)/10} onChange={e => setEditor({ ...editor, region: { ...editor.region, [key]: Number(e.target.value)/100 } })}/></label>)}</div></details></div>
-      {error && <p role="alert" className="feature-inline-error">{error}</p>}<div className="feature-dialog-actions"><button type="button" className="feature-button danger" disabled={saving} onClick={() => { if(board) void save({ ...board, cards: board.cards.filter(c => c.id !== editor.id) }).then(ok => { if(ok) setEditor(undefined); }); }}><Trash2 size={15}/>删除卡片</button><button className="feature-button primary" disabled={saving} type="submit"><Check size={16}/>保存修改</button></div>
-      </form></section></div>}
+      <div className="feature-location-editor"><Crop card={editor} url={board!.reference.url} aspect={aspect}/><button type="button" className="feature-button" onClick={() => { setLocating(true); setActive(editor.id); diagram.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }}><MousePointer2 size={15}/>在参考图上重新框选</button><details><summary>精确调整定位（百分比）</summary><div className="feature-region-inputs">{(['x','y','width','height'] as const).map(key => <label key={key}>{{ x:'左', y:'上', width:'宽', height:'高' }[key]}<input type="number" min={key==='x'||key==='y'?0:0.1} max="100" step="0.1" value={Math.round(editor.region[key]*1000)/10} onChange={e => { setEditor({ ...editor, region: { ...editor.region, [key]: Number(e.target.value)/100 } }); setRegionConfirmed(true); }}/></label>)}</div></details></div>
+      {error && <p role="alert" className="feature-inline-error">{error}</p>}<div className="feature-dialog-actions"><button type="button" className="feature-button danger" disabled={saving} onClick={() => { if(board) void save({ ...board, cards: board.cards.filter(c => c.id !== editor.id) }).then(ok => { if(ok) closeEditor(); }); }}><Trash2 size={15}/>删除卡片</button><button className="feature-button primary" disabled={saving} type="submit"><Check size={16}/>保存修改</button></div>
+      </fieldset></form></section></div>}
     {settings && <div className="feature-overlay"><section className="feature-modal" role="dialog" aria-modal="true" aria-label="生成设置"><div className="feature-dialog-head"><h2>生成设置</h2><button aria-label="关闭设置" onClick={() => setSettings(false)}><X/></button></div><p>只用于发现特征卡片。更新后对下一次生成生效，旧结果保持原配置。</p>{config && <><label>模型<input value={config.model} onChange={e => setConfig({ ...config, model: e.target.value })}/></label><label>推理强度<select value={config.reasoningEffort} onChange={e => setConfig({ ...config, reasoningEffort: e.target.value })}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(x => <option key={x}>{x}</option>)}</select></label></>}<p className="feature-muted">复用本地 Codex 登录 · 单次最长 30 分钟<br/>{bootstrap?.runtime.version}</p><button className="feature-button primary" onClick={() => setSettings(false)}>完成</button></section></div>}
     {exported && <div className="feature-overlay"><section className="feature-export-modal" role="dialog" aria-modal="true" aria-label="导出图片预览"><div className="feature-dialog-head"><div><h2>带走你选中的设计特征</h2><p>{selected.length} 张卡片 · PNG · {exported.width} × {exported.height} px · 下面就是实际导出的图片</p></div><button aria-label="关闭导出" onClick={closeExport}><X/></button></div><div className="feature-export-image"><img src={exported.url} alt="仅包含已选卡片的视觉规范导出图"/></div><div className="feature-dialog-actions"><button className="feature-button" onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><a className="feature-button primary" download={`Define-Pretty-${new Date().toISOString().slice(0,10)}.png`} href={exported.url}><Download size={16}/>下载 PNG</a></div></section></div>}
     {evidence && <div className="feature-overlay"><section className="feature-modal evidence" role="dialog" aria-modal="true" aria-label="生成记录"><div className="feature-dialog-head"><h2>记录与指令</h2><button aria-label="关闭记录" onClick={() => setEvidence('')}><X/></button></div><pre>{evidence}</pre></section></div>}

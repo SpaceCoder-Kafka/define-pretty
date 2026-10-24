@@ -12,6 +12,7 @@ import type { RunnerController } from './contracts.ts';
 import { FileStore } from './store.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FeatureTests } from './feature-tests.ts';
+import { FeatureCompletions } from './feature-completions.ts';
 import { createSessionToken, detectImageType, localRequestGuard, previewHeaders, requireSafeId, safeFilePath } from './security.ts';
 
 function experimentInput(value: unknown, config: Bootstrap['defaults']['config']): ExperimentInput {
@@ -65,7 +66,7 @@ async function listFiles(root: string, prefix = '', limit = { count: 0 }): Promi
 }
 
 export interface AppOptions {
-  featureBoards?: FeatureBoards; featureTests?: FeatureTests;
+  featureBoards?: FeatureBoards; featureTests?: FeatureTests; featureCompletions?: FeatureCompletions;
   highlights?: DimensionHighlights; comparisons?: VisualComparisons; store: FileStore; runner: RunnerController; generator?: SpecGenerator; consolePort: number; previewOrigin: string;
   config: Bootstrap['defaults']['config']; runtime: Bootstrap['runtime']; token?: string;
 }
@@ -95,6 +96,13 @@ export function createApp(options: AppOptions): Express {
   app.get('/api/feature-tests/:id/image', async (req,res) => { const id=requireSafeId(req.params.id); await tests().get(id); res.type('png').sendFile(path.join(tests().directory(id),'reference.png'),{dotfiles:'allow'}); });
 
   const boards = () => { if (!options.featureBoards) fail('视觉特征工作台尚未启用。', 503); return options.featureBoards!; };
+  const completions = () => { if(!options.featureCompletions)fail('卡片补全尚未启用。',503);return options.featureCompletions!; };
+  app.post('/api/feature-boards/:id/complete-card', async (req,res) => {
+    if(!runtime.codexAvailable||!runtime.authenticated)fail('Codex 不可用或尚未登录。',503);
+    res.status(202).json(await completions().start(requireSafeId(req.params.id),req.body ?? {},modelInput(req.body?.config,config)));
+  });
+  app.get('/api/feature-completions/:id',async (req,res)=>res.json(await completions().get(requireSafeId(req.params.id))));
+  app.post('/api/feature-completions/:id/cancel',async (req,res)=>res.json(await completions().cancel(requireSafeId(req.params.id))));
   app.get('/api/feature-boards', async (_req, res) => { res.json(await boards().list()); });
   app.post('/api/feature-boards', async (req, res) => { res.status(201).json(await boards().create(requireSafeId(req.body?.referenceId), modelInput(req.body?.config, config), text(req.body?.title, '特征板名称', 100))); });
   app.get('/api/feature-boards/:id', async (req, res) => { res.json(await boards().get(requireSafeId(req.params.id))); });
