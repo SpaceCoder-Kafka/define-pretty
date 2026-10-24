@@ -41,7 +41,7 @@ export default function FeatureStudio() {
     try {
       const boot = await api<Bootstrap>('/bootstrap'); if (!live) return;
       setApiToken(boot.token); setBootstrap(boot);
-      const defaults = boot.defaults.generationConfig || boot.defaults.config;
+      const defaults = boot.defaults.config;
       let preference: Partial<ModelConfig> = {};
       try { preference = JSON.parse(localStorage.getItem('define-pretty-feature-config') || '{}'); } catch { /* Ignore invalid local preference. */ }
       setConfig({ ...defaults, ...(typeof preference.model === 'string' ? { model: preference.model } : {}), ...(typeof preference.reasoningEffort === 'string' ? { reasoningEffort: preference.reasoningEffort } : {}) });
@@ -164,7 +164,7 @@ export default function FeatureStudio() {
   }
 
   return <div className="feature-app">
-    <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty <span className="feature-beta">特征卡片 · 实验版</span></a><div className="feature-header-actions"><a href={location.port === '4193' ? 'http://127.0.0.1:4173/?view=experiments' : '/?view=experiments'} className="feature-quiet">实验台历史 <ArrowUpRight size={14}/></a><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
+    <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty <span className="feature-beta">视觉特征卡片</span></a><div className="feature-header-actions"><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
     <main className="feature-main">
       <section className="feature-intro"><div><div className="feature-eyebrow">从「喜欢这个」到「借鉴这一点」</div><h1>把喜欢的设计，选出来。</h1><p>选择喜欢的视觉效果，保留关键关系，按自己的内容适配，再交给 AI。</p></div><ol className="feature-steps"><li className={board ? 'done' : 'current'}><span>1</span>上传参考图</li><li className={board?.cards.length ? 'done' : board ? 'current' : ''}><span>2</span>发现与选择</li><li className={selected.length ? 'current' : ''}><span>3</span>导出参考</li></ol></section>
       {error && <div className="feature-alert" role="alert">{error}<button aria-label="关闭错误" onClick={() => setError('')}><X size={16}/></button></div>}

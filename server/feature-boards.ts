@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FeatureBoard, FeatureCard, FeatureRegion } from '../shared/feature-board.ts';
-import type { ModelConfig, Run } from '../shared/types.ts';
-import { executeCodex, type Executor } from './runner.ts';
+import type { ModelConfig } from '../shared/types.ts';
+import { executeCodex, type Executor } from './codex.ts';
 import { FileStore } from './store.ts';
 import { fail, text } from './input.ts';
 import { requireSafeId } from './security.ts';
@@ -138,7 +138,7 @@ export class FeatureBoards {
   private async execute(board: FeatureBoard, referenceFile: string, active: { controller: AbortController; reason?: string }) {
     const timer = setTimeout(() => { active.reason = '生成超过 30 分钟，已停止。'; active.controller.abort(); }, this.timeoutMs);
     try {
-      const result = await this.executor({ run: { id: board.id } as Run, cwd: this.directory(board.id), prompt: FEATURE_PROMPT, config: { ...board.config, concurrency: 1, timeoutMs: this.timeoutMs }, referenceFile, signal: active.controller.signal, outputSchema: path.join(this.directory(board.id), 'schema.json'), readOnly: true });
+      const result = await this.executor({ run: { id: board.id }, cwd: this.directory(board.id), prompt: FEATURE_PROMPT, config: board.config, referenceFile, signal: active.controller.signal, outputSchema: path.join(this.directory(board.id), 'schema.json'), readOnly: true });
       await this.update(board.id, { usage: result.usage, exitCode: result.exitCode });
       if (active.controller.signal.aborted) throw new Error(active.reason);
       if (result.exitCode !== 0 || result.error) throw new Error(result.error || `Codex 退出码：${result.exitCode}`);

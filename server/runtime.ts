@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { parse } from 'smol-toml';
-import type { RunConfig, RuntimeInfo } from '../shared/types.ts';
+import type { ModelConfig, RuntimeInfo } from '../shared/types.ts';
 
 const execute = promisify(execFile);
-export async function getRuntimeDefaults(): Promise<{ config: RunConfig; runtime: RuntimeInfo }> {
+export async function getRuntimeDefaults(): Promise<{ config: ModelConfig; runtime: RuntimeInfo }> {
   let local: Record<string, unknown> = {};
   try { local = parse(await readFile(path.join(process.env.CODEX_HOME || path.join(homedir(), '.codex'), 'config.toml'), 'utf8')); } catch { /* Unconfigured CLI remains visible in health. */ }
   let version = '', authenticated = false, error: string | undefined;
@@ -24,7 +24,7 @@ export async function getRuntimeDefaults(): Promise<{ config: RunConfig; runtime
       model: typeof local.model === 'string' ? local.model : '',
       reasoningEffort: typeof local.model_reasoning_effort === 'string' ? local.model_reasoning_effort : 'medium',
       provider: typeof local.model_provider === 'string' ? local.model_provider : undefined,
-      cliVersion: version, concurrency: 2, timeoutMs: 30 * 60 * 1000,
+      cliVersion: version,
     },
     runtime: { codexAvailable, authenticated, version, error },
   };

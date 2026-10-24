@@ -1,18 +1,35 @@
 {
-  "name": "define-pretty", "private": true, "version": "0.1.0", "type": "module",
+  "name": "define-pretty",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "tsx server/index.ts", "build": "tsc --noEmit && vite build",
-    "dev:cards": "DEFINE_PRETTY_PORT=4193 DEFINE_PRETTY_PREVIEW_PORT=4194 DEFINE_PRETTY_DATA_DIR=.data/visual-cards tsx server/index.ts",
-    "build:cards": "tsc --noEmit && vite build --outDir dist/visual-cards",
-    "start:cards": "NODE_ENV=production DEFINE_PRETTY_PORT=4193 DEFINE_PRETTY_PREVIEW_PORT=4194 DEFINE_PRETTY_DATA_DIR=.data/visual-cards DEFINE_PRETTY_DIST_DIR=dist/visual-cards tsx server/index.ts",
+    "dev": "tsx server/index.ts",
+    "build": "tsc --noEmit && vite build --outDir dist/visual-cards",
+    "dev:cards": "npm run dev",
+    "build:cards": "npm run build",
+    "start:cards": "npm start",
     "start": "NODE_ENV=production tsx server/index.ts",
     "test": "tsx --test server/*.test.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^19.2.0", "react-dom": "^19.2.0", "lucide-react": "^0.468.0",
-    "express": "^5.1.0", "multer": "^2.0.2", "diff": "^8.0.2", "smol-toml": "^1.4.2",
-    "playwright": "^1.56.0", "tsx": "^4.20.6", "vite": "^7.1.12"
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "lucide-react": "^0.468.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "smol-toml": "^1.4.2",
+    "playwright": "^1.56.0",
+    "tsx": "^4.20.6",
+    "vite": "^7.1.12"
   },
-  "devDependencies": { "typescript": "^5.9.3", "@types/node": "^24.9.1", "@types/react": "^19.2.2", "@types/react-dom": "^19.2.2", "@types/express": "^5.0.3", "@types/multer": "^2.0.0" }
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.9.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0"
+  }
 }

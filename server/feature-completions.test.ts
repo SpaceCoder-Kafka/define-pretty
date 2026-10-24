@@ -6,7 +6,7 @@ import path from 'node:path';
 import { FileStore } from './store.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FeatureCompletions } from './feature-completions.ts';
-import type { Executor } from './runner.ts';
+import type { Executor } from './codex.ts';
 
 const config={model:'test',reasoningEffort:'medium',cliVersion:'test'};
 const result={description:'框内有浅色图标块。',effect:'入口有分组，不抢主要内容。',instruction:'• 同组尺寸一致。\n• 空间不足时允许换行，保留等距。',applicability:'适合少量辅助入口；长说明应保留文字。'};

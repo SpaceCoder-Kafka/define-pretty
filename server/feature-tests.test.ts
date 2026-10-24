@@ -6,7 +6,7 @@ import path from 'node:path';
 import { FeatureTests } from './feature-tests.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FileStore } from './store.ts';
-import { hashWebsite, type Executor } from './runner.ts';
+import { hashWebsite, type Executor } from './codex.ts';
 import { featureInstruction } from '../shared/feature-board.ts';
 const config={model:'test',reasoningEffort:'medium',cliVersion:'test'};
 const png=Buffer.from('89504e470d0a1a0a0000000d494844520000000100000001','hex');

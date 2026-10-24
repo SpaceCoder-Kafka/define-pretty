@@ -1,13 +1,9 @@
-import { DimensionHighlights } from './dimension-highlights.ts';
-import { VisualComparisons } from './visual-comparison.ts';
-import { SpecGenerator } from './specs.ts';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import express from 'express';
 import { createApp, createPreviewApp, errorHandler } from './http.ts';
 import { FileStore } from './store.ts';
-import { Runner } from './runner.ts';
 import { getRuntimeDefaults } from './runtime.ts';
 import { acquireDataDirectoryLock } from './data-lock.ts';
 import { FeatureBoards } from './feature-boards.ts';
@@ -37,11 +33,11 @@ function close(server: Server): Promise<void> {
 }
 
 export async function startServers() {
-  const consolePort = port(process.env.DEFINE_PRETTY_PORT, 4173);
-  const previewPort = port(process.env.DEFINE_PRETTY_PREVIEW_PORT, 4174);
+  const consolePort = port(process.env.DEFINE_PRETTY_PORT, 4193);
+  const previewPort = port(process.env.DEFINE_PRETTY_PREVIEW_PORT, 4194);
   if (consolePort === previewPort) throw new Error('控制台与网页预览必须使用不同端口。');
   const previewOrigin = `http://127.0.0.1:${previewPort}`;
-  const store = new FileStore(process.env.DEFINE_PRETTY_DATA_DIR || path.resolve('.data'));
+  const store = new FileStore(process.env.DEFINE_PRETTY_DATA_DIR || path.resolve('.data/visual-cards'));
   const dataLock = await acquireDataDirectoryLock(store.root);
   let startup;
   try {
@@ -58,17 +54,13 @@ export async function startServers() {
   try { await featureTests.initialize(); } catch (error) { await dataLock.release(); throw error; }
   const featureCompletions = new FeatureCompletions(featureBoards, store);
   try { await featureCompletions.initialize(); } catch (error) { await dataLock.release(); throw error; }
-  const runner = new Runner({ store, previewOrigin });
-  const generator = new SpecGenerator(store);
-  const comparisons = new VisualComparisons(store, consolePort);
-  const highlights = new DimensionHighlights(store, comparisons);
-  const app = createApp({ featureCompletions, featureTests, featureBoards, highlights, comparisons, store, runner, generator, consolePort, previewOrigin, config, runtime });
+  const app = createApp({ featureCompletions, featureTests, featureBoards, store, consolePort, previewOrigin, config, runtime });
   const server = createServer(app);
-  const previewServer = createServer(createPreviewApp(store, consolePort, featureTests));
+  const previewServer = createServer(createPreviewApp(consolePort, featureTests));
   let vite: Awaited<ReturnType<typeof import('vite')['createServer']>> | undefined;
   try {
     if (process.env.NODE_ENV === 'production') {
-      const directory = path.resolve(process.env.DEFINE_PRETTY_DIST_DIR || 'dist');
+      const directory = path.resolve(process.env.DEFINE_PRETTY_DIST_DIR || 'dist/visual-cards');
       app.use(express.static(directory));
       app.get('/{*path}', (_req, res) => res.sendFile(path.join(directory, 'index.html')));
     } else {
@@ -81,10 +73,6 @@ export async function startServers() {
     await listen(server, consolePort);
   } catch (error) {
     await Promise.all([close(server), close(previewServer), vite?.close()]);
-    await highlights.shutdown();
-    await comparisons.shutdown();
-    await runner.shutdown();
-    await generator.shutdown();
     await featureTests.shutdown();
     await featureCompletions.shutdown();
     await featureBoards.shutdown();
@@ -96,10 +84,6 @@ export async function startServers() {
   let closing: Promise<void> | undefined;
   const shutdown = () => closing ??= (async () => {
     try {
-      await highlights.shutdown();
-      await comparisons.shutdown();
-      await runner.shutdown();
-      await generator.shutdown();
       await featureTests.shutdown();
       await featureCompletions.shutdown();
       await featureBoards.shutdown();
@@ -107,7 +91,7 @@ export async function startServers() {
       await Promise.all([close(server), close(previewServer)]);
     } finally { await dataLock.release(); }
   })();
-  return { app, server, previewServer, store, runner, shutdown };
+  return { app, server, previewServer, store, shutdown };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -4,9 +4,9 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { featureInstruction, selectedFeatures } from '../shared/feature-board.ts';
 import type { FeatureTest, FeatureTestSource } from '../shared/feature-test.ts';
-import type { Experiment, ModelConfig, Run } from '../shared/types.ts';
+import type { ModelConfig } from '../shared/types.ts';
 import { FeatureBoards } from './feature-boards.ts';
-import { executeCodex, hashWebsite, type Executor } from './runner.ts';
+import { executeCodex, hashWebsite, type Executor } from './codex.ts';
 import { chromeExecutable, inspectWebsite } from './validation.ts';
 import { detectImageType, requireSafeId, safeFilePath } from './security.ts';
 import { fail } from './input.ts';
@@ -69,14 +69,14 @@ export class FeatureTests {
     try { return JSON.parse(await readFile(path.join(this.root,'source.json'),'utf8')); }
     catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT') throw error; }
     // Read the main store without initializing it: recovery must never alter main-branch runs.
-    const data = JSON.parse(await readFile(path.join(this.mainRoot,'store.json'),'utf8')) as { experiments: Experiment[]; runs: Run[] };
+    const data = JSON.parse(await readFile(path.join(this.mainRoot,'store.json'),'utf8')) as { experiments: { id: string; title: string; createdAt: string; versions: { id: string; number: number; baselineRunId?: string; config: ModelConfig }[] }[]; runs: { id: string; groupId: string; status: string; artifactHash?: string; createdAt: string }[] };
     const experiment = [...data.experiments].sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];
     const version = experiment?.versions.toSorted((a,b)=>b.number-a.number)[0];
     const baseline = data.runs.find(r=>r.id===version?.baselineRunId);
-    if(!experiment || !version || !baseline || baseline.groupId!=='baseline' || baseline.status!=='completed' || !baseline.artifactHash) fail('主实验台最后一个实验还没有可用的原始网页。',409);
+    if(!experiment || !version || !baseline || baseline.groupId!=='baseline' || baseline.status!=='completed' || !baseline.artifactHash) fail('尚未导入可用的验证原网页。',409);
     const sourceDir=path.join(this.mainRoot,'runs',requireSafeId(baseline.id),'website');
     await safeFilePath(sourceDir,'index.html');
-    if(await hashWebsite(sourceDir)!==baseline.artifactHash) fail('主实验台原始网页的哈希已变化，不能作为验证基线。',409);
+    if(await hashWebsite(sourceDir)!==baseline.artifactHash) fail('历史原始网页的哈希已变化，不能作为验证基线。',409);
     const target=this.sourceDirectory(baseline.id); await mkdir(path.dirname(target),{recursive:true}); await cp(sourceDir,target,{recursive:true});
     if(await hashWebsite(target)!==baseline.artifactHash) fail('原始网页复制校验失败。',409);
     const source: FeatureTestSource={ experimentId:experiment.id,title:experiment.title,versionId:version.id,versionNumber:version.number,runId:baseline.id,createdAt:baseline.createdAt,hash:baseline.artifactHash,config:version.config };
@@ -107,7 +107,7 @@ export class FeatureTests {
   private async execute(run: FeatureTest, active: NonNullable<FeatureTests['active']>) {
     const timer=setTimeout(()=>{active.reason='timeout';active.controller.abort();},this.timeoutMs);
     try {
-      const result=await this.executor({run: {id:run.id} as Run,cwd:this.workDirectory(run.id),prompt:run.prompt,referenceFile:path.join(this.directory(run.id),'reference.png'),config:{...run.config,concurrency:1,timeoutMs:this.timeoutMs},signal:active.controller.signal});
+      const result=await this.executor({run: {id:run.id},cwd:this.workDirectory(run.id),prompt:run.prompt,referenceFile:path.join(this.directory(run.id),'reference.png'),config: run.config,signal:active.controller.signal});
       Object.assign(run,{exitCode:result.exitCode,usage:result.usage,summary:result.summary});
       if(active.controller.signal.aborted) throw new Error('测试已停止。');
       try { await inspectWebsite(this.websiteDirectory(run.id)); run.hasPreview=true; } catch { /* Keep failed files, but do not expose an invalid tree. */ }

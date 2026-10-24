@@ -6,7 +6,7 @@ import os from 'node:os';
 import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT, featureSchema } from './feature-boards.ts';
 import { FileStore } from './store.ts';
 import { featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
-import type { Executor } from './runner.ts';
+import type { Executor } from './codex.ts';
 
 const config = { model: 'test', reasoningEffort: 'medium', cliVersion: 'test' };
 const generated = { title: '用深色突出主要操作', description: '主要操作使用实心深色，与浅色页面形成对比。', instruction: '把主要操作设为实心深色，次要操作保持轻量。', effect: '让主要操作成为视觉入口。', adaptation: '迁移建议：按钮宽度随文案增长，保留主次对比。', applicability: '具有主次操作关系的工具栏或表单。', region: { x: .2, y: .3, width: .4, height: .2 } };
