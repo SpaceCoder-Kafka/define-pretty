@@ -1,10 +1,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
-import { Upload, Sparkles, Plus, Check, Pencil, Download, Copy, X, SlidersHorizontal, MousePointer2, Image as ImageIcon, RotateCcw, ArrowUpRight, LoaderCircle, CheckCheck, Square, Trash2, FileText } from 'lucide-react';
+import { FlaskConical, Upload, Sparkles, Plus, Check, Pencil, Download, Copy, X, SlidersHorizontal, MousePointer2, Image as ImageIcon, RotateCcw, ArrowUpRight, LoaderCircle, CheckCheck, Square, Trash2, FileText } from 'lucide-react';
 import type { Bootstrap, ModelConfig, ReferenceAsset } from '../shared/types';
 import { featureInstruction, featureSections, selectedFeatures, type FeatureBoard, type FeatureCard, type FeatureRegion } from '../shared/feature-board';
 import { api, errorMessage, setApiToken } from './api';
 import { exportFeatureBoard, loadReference } from './feature-export';
 import './feature-studio.css';
+import FeatureValidation, { useFeatureTests } from './FeatureValidation';
 
 type Wire = { id: string; path: string };
 const statusText: Record<FeatureBoard['status'], string> = { draft: '待生成', running: '生成中', completed: '已生成', failed: '生成失败', cancelled: '已取消', interrupted: '已中断' };
@@ -25,7 +26,8 @@ export default function FeatureStudio() {
   const upload = useRef<HTMLInputElement>(null), diagram = useRef<HTMLDivElement>(null), picture = useRef<HTMLImageElement>(null);
   const cardsRef = useRef(new Map<string, HTMLElement>()), start = useRef<{ x: number; y: number } | undefined>(undefined);
   const exportedRef = useRef('');
-  const locked = busy || saving || board?.status === 'running';
+  const validation = useFeatureTests(board, bootstrap);
+  const locked = busy || validation.busy || saving || board?.status === 'running';
   const view = board && editor ? { ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) } : board;
   const selected = view ? selectedFeatures(view) : [];
 
@@ -156,9 +158,9 @@ export default function FeatureStudio() {
           <div className="feature-board-meta"><span>原图：{board.reference.name}</span><button disabled={busy} onClick={() => void perform(async () => { const value = await api<Record<string, unknown>>(`/feature-boards/${board.id}/evidence`); setEvidence(JSON.stringify(value,null,2)); })}><FileText size={13}/>生成记录</button></div>
         </>}
       </section>
-      <p className="feature-bottom-note">每一次选择，都是一份更明确的设计意图。修改网页仍由你正在使用的 AI 工具完成。</p>
+      <FeatureValidation state={validation}/>
     </main>
-    <footer className="feature-selection"><div><span className="feature-selected-count">{selected.length.toString().padStart(2,'0')}</span><div><strong>{selected.length ? '个特征已选中' : '选择你想借鉴的特征'}</strong><span>{selected.length ? selected.map(c => c.title).join(' · ') : '导出图片只包含所选卡片及其标注'}</span></div></div><div><button className="feature-button" disabled={!selected.length || locked || !!editor} onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady} onClick={() => void previewExport()}>{busy ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>}预览并导出图片</button></div></footer>
+    <footer className="feature-selection"><div><span className="feature-selected-count">{selected.length.toString().padStart(2,'0')}</span><div><strong>{selected.length ? '个特征已选中' : '选择你想借鉴的特征'}</strong><span>{selected.length ? selected.map(c => c.title).join(' · ') : '导出图片只包含所选卡片及其标注'}</span></div></div><div><button className="feature-button" disabled={!selected.length || locked || !!editor} onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady} onClick={() => void previewExport()}>{busy ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>}预览并导出图片</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady || !validation.ready || validation.running} onClick={() => void validation.start()}><FlaskConical size={16}/>{validation.busy ? '准备测试…' : validation.running ? '测试进行中' : '测试所选设计'}</button></div></footer>
     {editor && !locating && <div className="feature-overlay" onMouseDown={e => { if(e.target === e.currentTarget) setEditor(undefined); }}><section className="feature-drawer" role="dialog" aria-modal="true" aria-label="编辑特征卡片"><div className="feature-dialog-head"><div><small>FEATURE DETAILS</small><h2>编辑这个特征</h2></div><button aria-label="关闭编辑" onClick={() => setEditor(undefined)}><X/></button></div><form onSubmit={e => { e.preventDefault(); if(board) void save({ ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) }).then(ok => { if(ok) setEditor(undefined); }); }}>
       <label>特征名称<input autoFocus value={editor.title} maxLength={60} required onChange={e => setEditor({ ...editor, title: e.target.value })}/></label>
       <label>图中依据 <span>只记录可见的参考特征</span><textarea value={editor.description} maxLength={240} onChange={e => setEditor({ ...editor, description: e.target.value })}/></label>

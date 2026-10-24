@@ -11,6 +11,7 @@ import { DEFAULT_BUSINESS_BRIEF, DEFAULT_DIMENSIONS } from '../shared/defaults.t
 import type { RunnerController } from './contracts.ts';
 import { FileStore } from './store.ts';
 import { FeatureBoards } from './feature-boards.ts';
+import { FeatureTests } from './feature-tests.ts';
 import { createSessionToken, detectImageType, localRequestGuard, previewHeaders, requireSafeId, safeFilePath } from './security.ts';
 
 function experimentInput(value: unknown, config: Bootstrap['defaults']['config']): ExperimentInput {
@@ -64,7 +65,7 @@ async function listFiles(root: string, prefix = '', limit = { count: 0 }): Promi
 }
 
 export interface AppOptions {
-  featureBoards?: FeatureBoards;
+  featureBoards?: FeatureBoards; featureTests?: FeatureTests;
   highlights?: DimensionHighlights; comparisons?: VisualComparisons; store: FileStore; runner: RunnerController; generator?: SpecGenerator; consolePort: number; previewOrigin: string;
   config: Bootstrap['defaults']['config']; runtime: Bootstrap['runtime']; token?: string;
 }
@@ -77,6 +78,21 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', localRequestGuard(consolePort, token));
   app.use('/api', express.json({ limit: '512kb' }));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } });
+
+  const tests = () => { if (!options.featureTests) fail('验证区域尚未启用。',503); return options.featureTests!; };
+  const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 3, fieldSize: 4000 } });
+  app.get('/api/feature-tests/source', async (_req,res) => res.json(await tests().getSource()));
+  app.get('/api/feature-tests', async (req,res) => res.json(await tests().list(req.query.boardId ? requireSafeId(req.query.boardId) : undefined)));
+  app.post('/api/feature-tests', testUpload.single('image'), async (req,res) => {
+    if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
+    if (!req.file) fail('缺少所选卡片的导出图片。');
+    let supplied; try { supplied=JSON.parse(req.body?.config || '{}'); } catch { fail('测试模型配置无效。'); }
+    const revision=Number(req.body?.revision); if(!Number.isSafeInteger(revision) || revision<1) fail('卡片版本无效。');
+    res.status(202).json(await tests().start(requireSafeId(req.body?.boardId),revision,req.file!.buffer,modelInput(supplied,config)));
+  });
+  app.get('/api/feature-tests/:id', async (req,res) => res.json(await tests().get(requireSafeId(req.params.id))));
+  app.post('/api/feature-tests/:id/cancel', async (req,res) => res.json(await tests().cancel(requireSafeId(req.params.id))));
+  app.get('/api/feature-tests/:id/image', async (req,res) => { const id=requireSafeId(req.params.id); await tests().get(id); res.type('png').sendFile(path.join(tests().directory(id),'reference.png'),{dotfiles:'allow'}); });
 
   const boards = () => { if (!options.featureBoards) fail('视觉特征工作台尚未启用。', 503); return options.featureBoards!; };
   app.get('/api/feature-boards', async (_req, res) => { res.json(await boards().list()); });
@@ -223,10 +239,17 @@ export function createApp(options: AppOptions): Express {
   return app;
 }
 
-export function createPreviewApp(store: FileStore, consolePort: number): Express {
+export function createPreviewApp(store: FileStore, consolePort: number, featureTests?: FeatureTests): Express {
   const app = express();
   app.disable('x-powered-by');
   app.use(previewHeaders(consolePort));
+  app.get(/^\/feature-tests\/(sources|runs)\/([a-zA-Z0-9_-]+)\/(.*)$/, async (req,res) => {
+    if(!featureTests) fail('验证区域尚未启用。',404);
+    const id=requireSafeId(req.params[1]); let directory: string;
+    if(req.params[0]==='sources') { const source=await featureTests!.getSource(); if(id!==source.runId) fail('原始网页不存在。',404); directory=featureTests!.sourceDirectory(id); }
+    else { const run=await featureTests!.get(id); if(!run.hasPreview || ['queued','running'].includes(run.status)) fail('测试网页尚未就绪。',404); directory=featureTests!.websiteDirectory(id); }
+    res.sendFile(await safeFilePath(directory,req.params[2] || 'index.html'),{dotfiles:'allow'});
+  });
   app.get('/favicon.ico', (_req, res) => { res.status(204).end(); });
   app.get(/^\/runs\/([a-zA-Z0-9_-]+)\/(.*)$/, async (req, res) => {
     const runId = requireSafeId(req.params[0]);
