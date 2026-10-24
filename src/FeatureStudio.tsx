@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { Upload, Sparkles, Plus, Check, Pencil, Download, Copy, X, SlidersHorizontal, MousePointer2, Image as ImageIcon, RotateCcw, ArrowUpRight, LoaderCircle, CheckCheck, Square, Trash2, FileText } from 'lucide-react';
 import type { Bootstrap, ModelConfig, ReferenceAsset } from '../shared/types';
-import { featureInstruction, selectedFeatures, type FeatureBoard, type FeatureCard, type FeatureRegion } from '../shared/feature-board';
+import { featureInstruction, featureSections, selectedFeatures, type FeatureBoard, type FeatureCard, type FeatureRegion } from '../shared/feature-board';
 import { api, errorMessage, setApiToken } from './api';
 import { exportFeatureBoard, loadReference } from './feature-export';
 import './feature-studio.css';
@@ -87,7 +87,7 @@ export default function FeatureStudio() {
         return { id: card.id, path: `M${sx} ${sy} L${bend} ${sy} L${bend} ${ey} L${ex} ${ey}` };
       }));
     }); };
-    const observer = new ResizeObserver(update); observer.observe(diagram.current); observer.observe(picture.current); update();
+    const observer = new ResizeObserver(update); observer.observe(diagram.current); observer.observe(picture.current); cardsRef.current.forEach(el => observer.observe(el)); update();
     return () => { observer.disconnect(); cancelAnimationFrame(frame); };
   }, [board?.cards, editor?.region, aspect, imageReady]);
 
@@ -109,7 +109,7 @@ export default function FeatureStudio() {
     adopt(await api<FeatureBoard>(`/feature-boards/${next.id}/generate`, { method: 'POST' }));
   }); }
   function toggle(card: FeatureCard) { if (board && !locked && !editor) void save({ ...board, cards: board.cards.map(c => c.id === card.id ? { ...c, selected: !c.selected } : c) }); }
-  async function addCard() { if (!board) return; const card: FeatureCard = { id: crypto.randomUUID(), title: '我的设计特征', description: '描述你在图中喜欢的特征。', instruction: '请借鉴这个区域的视觉特征，保留现有业务内容。', selected: false, application: '', region: { x: .25, y: .25, width: .5, height: .5 } };
+  async function addCard() { if (!board) return; const card: FeatureCard = { id: crypto.randomUUID(), title: '我的设计特征', description: '', effect: '', instruction: '说明迁移时需要保留的视觉关系。', adaptation: '', applicability: '', selected: false, application: '', region: { x: .25, y: .25, width: .5, height: .5 } };
     if (await save({ ...board, cards: [...board.cards, card] })) { setEditor(card); setActive(card.id); }
   }
   function position(e: PointerEvent) { const box = picture.current!.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)), y: Math.max(0, Math.min(1, (e.clientY - box.top) / box.height)) }; }
@@ -123,7 +123,9 @@ export default function FeatureStudio() {
     const focused = active === card.id;
     return <article key={card.id} style={{ order: index }} ref={el => { if(el) cardsRef.current.set(card.id, el); else cardsRef.current.delete(card.id); }} className={`feature-card ${card.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`} onMouseEnter={() => setActive(card.id)} onMouseLeave={() => setActive('')} onFocus={() => setActive(card.id)}>
       <div className="feature-card-head"><span className="feature-number">{index + 1}</span><label><input type="checkbox" checked={card.selected} disabled={locked || !!editor} onChange={() => toggle(card)} /><span>{card.title}</span></label><button className="feature-icon" aria-label={`编辑${card.title}`} disabled={locked} onClick={() => { setEditor(structuredClone(card)); setActive(card.id); }}><Pencil size={15}/></button></div>
-      <Crop card={card} url={board!.reference.url} aspect={aspect}/><p>{card.description}</p>
+      <Crop card={card} url={board!.reference.url} aspect={aspect}/>
+      <dl className="feature-rules">{featureSections(card).map(section => <div key={section.label}><dt>{section.label}</dt><dd>{section.text}</dd></div>)}</dl>
+      {card.description && <details className="feature-source"><summary>查看图中依据</summary><p>{card.description}</p></details>}
       <div className="feature-card-foot"><span>{card.selected ? <><Check size={13}/>已选入参考图</> : '勾选以借鉴这个特征'}</span><button disabled={locked} onClick={() => { setEditor(structuredClone(card)); setActive(card.id); }}>编辑要求 <ArrowUpRight size={13}/></button></div>
     </article>;
   }
@@ -131,7 +133,7 @@ export default function FeatureStudio() {
   return <div className="feature-app">
     <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty <span className="feature-beta">特征卡片 · 实验版</span></a><div className="feature-header-actions"><a href={location.port === '4193' ? 'http://127.0.0.1:4173/?view=experiments' : '/?view=experiments'} className="feature-quiet">实验台历史 <ArrowUpRight size={14}/></a><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
     <main className="feature-main">
-      <section className="feature-intro"><div><div className="feature-eyebrow">从「喜欢这个」到「借鉴这一点」</div><h1>把喜欢的设计，选出来。</h1><p>在参考图中发现特征，勾选你想借鉴的部分，带着明确的视觉参考交给 AI。</p></div><ol className="feature-steps"><li className={board ? 'done' : 'current'}><span>1</span>上传参考图</li><li className={board?.cards.length ? 'done' : board ? 'current' : ''}><span>2</span>发现与选择</li><li className={selected.length ? 'current' : ''}><span>3</span>导出参考</li></ol></section>
+      <section className="feature-intro"><div><div className="feature-eyebrow">从「喜欢这个」到「借鉴这一点」</div><h1>把喜欢的设计，选出来。</h1><p>选择喜欢的视觉效果，保留关键关系，按自己的内容适配，再交给 AI。</p></div><ol className="feature-steps"><li className={board ? 'done' : 'current'}><span>1</span>上传参考图</li><li className={board?.cards.length ? 'done' : board ? 'current' : ''}><span>2</span>发现与选择</li><li className={selected.length ? 'current' : ''}><span>3</span>导出参考</li></ol></section>
       {error && <div className="feature-alert" role="alert">{error}<button aria-label="关闭错误" onClick={() => setError('')}><X size={16}/></button></div>}
       {notice && <div className="feature-notice" role="status">{notice}</div>}
       <input hidden ref={upload} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => { void uploadFile(e.target.files?.[0]); e.target.value = ''; }}/>
@@ -141,6 +143,7 @@ export default function FeatureStudio() {
           <div className="feature-subtoolbar"><span><MousePointer2 size={14}/>{board.cards.length ? `${board.cards.length} 个可借鉴特征 · 悬停卡片，查看图中出处` : '先生成特征卡片，或手动添加你喜欢的一点'}</span><div><button disabled={locked || !!editor || board.cards.length >= 12} onClick={() => void addCard()}><Plus size={14}/>手动添加</button><button disabled={locked || !!editor || !board.cards.length} onClick={() => void save({ ...board, cards: board.cards.map(c => ({ ...c, selected: selected.length !== board.cards.length })) })}>{selected.length === board.cards.length && selected.length ? <Square size={14}/> : <CheckCheck size={14}/>} {selected.length === board.cards.length && selected.length ? '取消全选' : '全选'}</button></div></div>
           {board.status === 'running' && <div className="feature-generating"><LoaderCircle className="spin" size={20}/><div><strong>正在发现参考图中的视觉特征</strong><span>定位区域、整理说明与迁移要求。完成后由你选择。</span></div><button className="feature-button" onClick={() => void perform(async () => adopt(await api<FeatureBoard>(`/feature-boards/${board.id}/cancel`, { method: 'POST' })))}>取消生成</button></div>}
           {board.error && <div className="feature-alert">{board.error} 原始图片与生成记录已保留。</div>}
+          {board.cards.length > 0 && board.cards.every(c => !c.effect && !c.adaptation && !c.applicability) && <div className="feature-legacy-note">这份历史卡片保留原有内容。点击「重新生成」可生成包含视觉效果、关键关系、适配方式与适用对象的新版卡片。</div>}
           {locating && <div className="feature-locate-banner">在参考图上拖出「{editor?.title}」的区域。<button onClick={() => { setLocating(false); setDrag(undefined); start.current = undefined; }}>返回编辑</button></div>}
           <div className={`feature-diagram ${locating ? 'is-locating' : ''}`} ref={diagram}>
             <svg className="feature-wires" viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`} aria-hidden="true">{wires.map(w => <path key={w.id} d={w.path} className={active === w.id || selected.some(c => c.id === w.id) ? 'on' : ''}/>)}</svg>
@@ -158,8 +161,11 @@ export default function FeatureStudio() {
     <footer className="feature-selection"><div><span className="feature-selected-count">{selected.length.toString().padStart(2,'0')}</span><div><strong>{selected.length ? '个特征已选中' : '选择你想借鉴的特征'}</strong><span>{selected.length ? selected.map(c => c.title).join(' · ') : '导出图片只包含所选卡片及其标注'}</span></div></div><div><button className="feature-button" disabled={!selected.length || locked || !!editor} onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady} onClick={() => void previewExport()}>{busy ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>}预览并导出图片</button></div></footer>
     {editor && !locating && <div className="feature-overlay" onMouseDown={e => { if(e.target === e.currentTarget) setEditor(undefined); }}><section className="feature-drawer" role="dialog" aria-modal="true" aria-label="编辑特征卡片"><div className="feature-dialog-head"><div><small>FEATURE DETAILS</small><h2>编辑这个特征</h2></div><button aria-label="关闭编辑" onClick={() => setEditor(undefined)}><X/></button></div><form onSubmit={e => { e.preventDefault(); if(board) void save({ ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) }).then(ok => { if(ok) setEditor(undefined); }); }}>
       <label>特征名称<input autoFocus value={editor.title} maxLength={60} required onChange={e => setEditor({ ...editor, title: e.target.value })}/></label>
-      <label>给自己的说明<textarea value={editor.description} maxLength={240} onChange={e => setEditor({ ...editor, description: e.target.value })}/></label>
-      <label>交给 AI 的迁移要求<textarea value={editor.instruction} maxLength={600} required rows={4} onChange={e => setEditor({ ...editor, instruction: e.target.value })}/></label>
+      <label>图中依据 <span>只记录可见的参考特征</span><textarea value={editor.description} maxLength={240} onChange={e => setEditor({ ...editor, description: e.target.value })}/></label>
+      <label>视觉效果 <span>希望借鉴什么效果</span><textarea value={editor.effect || ''} maxLength={160} placeholder="例如：让主要操作成为视觉入口" onChange={e => setEditor({ ...editor, effect: e.target.value })}/></label>
+      <label>保留关系 <span>迁移时要保留什么</span><textarea value={editor.instruction} maxLength={600} required rows={4} onChange={e => setEditor({ ...editor, instruction: e.target.value })}/></label>
+      <label>适配方式 <span>什么可以变，何时怎样变</span><textarea value={editor.adaptation || ''} maxLength={320} rows={4} placeholder="例如：文案较长时允许增高，保留标题与辅助信息的层级。数值请区分观察估计与迁移建议。" onChange={e => setEditor({ ...editor, adaptation: e.target.value })}/></label>
+      <label>适用对象 <span>匹配组件用途与信息结构</span><textarea value={editor.applicability || ''} maxLength={200} placeholder="例如：具有标题、辅助信息和操作的任务项、文件项或结果列表" onChange={e => setEditor({ ...editor, applicability: e.target.value })}/></label>
       <label>应用到我的哪里 <span>选填</span><input placeholder="例如：任务列表卡片 / 顶部导航" maxLength={200} value={editor.application} onChange={e => setEditor({ ...editor, application: e.target.value })}/></label>
       <div className="feature-location-editor"><Crop card={editor} url={board!.reference.url} aspect={aspect}/><button type="button" className="feature-button" onClick={() => { setLocating(true); setActive(editor.id); diagram.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }}><MousePointer2 size={15}/>在参考图上重新框选</button><details><summary>精确调整定位（百分比）</summary><div className="feature-region-inputs">{(['x','y','width','height'] as const).map(key => <label key={key}>{{ x:'左', y:'上', width:'宽', height:'高' }[key]}<input type="number" min={key==='x'||key==='y'?0:0.1} max="100" step="0.1" value={Math.round(editor.region[key]*1000)/10} onChange={e => setEditor({ ...editor, region: { ...editor.region, [key]: Number(e.target.value)/100 } })}/></label>)}</div></details></div>
       {error && <p role="alert" className="feature-inline-error">{error}</p>}<div className="feature-dialog-actions"><button type="button" className="feature-button danger" disabled={saving} onClick={() => { if(board) void save({ ...board, cards: board.cards.filter(c => c.id !== editor.id) }).then(ok => { if(ok) setEditor(undefined); }); }}><Trash2 size={15}/>删除卡片</button><button className="feature-button primary" disabled={saving} type="submit"><Check size={16}/>保存修改</button></div>

@@ -9,7 +9,7 @@ import { featureInstruction } from '../shared/feature-board.ts';
 import type { Executor } from './runner.ts';
 
 const config = { model: 'test', reasoningEffort: 'medium', cliVersion: 'test' };
-const generated = { title: '用深色突出主要操作', description: '主要操作使用实心深色，与浅色页面形成对比。', instruction: '把主要操作设为实心深色，次要操作保持轻量。', region: { x: .2, y: .3, width: .4, height: .2 } };
+const generated = { title: '用深色突出主要操作', description: '主要操作使用实心深色，与浅色页面形成对比。', instruction: '把主要操作设为实心深色，次要操作保持轻量。', effect: '让主要操作成为视觉入口。', adaptation: '迁移建议：按钮宽度随文案增长，保留主次对比。', applicability: '具有主次操作关系的工具栏或表单。', region: { x: .2, y: .3, width: .4, height: .2 } };
 async function fixture(executor?: Executor) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'pretty-features-'));
   const store = new FileStore(root); await store.initialize();
@@ -83,5 +83,25 @@ test('shutdown during input preparation does not launch an orphaned model proces
     await f.boards.shutdown(); await generation;
     assert.equal(launched, false);
     assert.equal((await f.boards.get(f.board.id)).status, 'interrupted');
+  } finally { await f.cleanup(); }
+});
+
+
+test('transfer guidance survives saving and reaches selected instructions; legacy cards stay readable', async () => {
+  const f = await fixture();
+  try {
+    const cards = cardsInput([generated], true); cards[0].selected = true;
+    const updated = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards });
+    const persisted = await f.boards.get(updated.id);
+    for (const key of ['effect','adaptation','applicability'] as const) {
+      assert.equal(persisted.cards[0][key], generated[key]);
+      assert.ok(featureInstruction(persisted).includes(generated[key]));
+    }
+    const { effect, adaptation, applicability, ...legacy } = cards[0];
+    const old = cardsInput([legacy])[0];
+    assert.equal(old.instruction, legacy.instruction);
+    assert.equal(old.adaptation, '');
+    assert.throws(() => cardsInput([{ ...generated, adaptation: undefined }], true));
+    assert.throws(() => cardsInput([{ ...cards[0], effect: 'a'.repeat(161) }]));
   } finally { await f.cleanup(); }
 });

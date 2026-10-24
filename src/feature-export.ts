@@ -1,4 +1,4 @@
-import { selectedFeatures, type FeatureBoard } from '../shared/feature-board';
+import { featureSections, selectedFeatures, type FeatureBoard } from '../shared/feature-board';
 
 export function loadReference(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('参考图片无法读取，请重新上传。')); img.src = url; });
@@ -31,11 +31,14 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
   const width = 2200, cardWidth = 470, textWidth = cardWidth - 48, startY = 210;
   const cards = selected.map((card, index) => {
     ctx.font = font(25, 700); const title = lines(ctx, card.title, textWidth - 42);
-    ctx.font = font(21); const description = lines(ctx, card.description, textWidth);
-    const instruction = lines(ctx, card.instruction, textWidth);
-    const application = lines(ctx, `应用对象：${card.application || '由 AI 结合现有界面匹配'}`, textWidth);
-    const height = 250 + title.length * 34 + description.length * 30 + instruction.length * 30 + application.length * 30;
-    return { card, index, title, description, instruction, application, height, x: index % 2 === 0 ? 46 : width - cardWidth - 46, y: 0 };
+    const sections = featureSections(card).map(section => {
+      ctx.font = font(21); return { ...section, rows: lines(ctx, section.text, textWidth) };
+    });
+    ctx.font = font(21);
+    const application = lines(ctx, card.application ? `指定区域：${card.application}` : '应用区域：按组件用途匹配现有界面', textWidth);
+    const height = 240 + title.length * 34 + sections.reduce((sum, section) => sum + 34 + section.rows.length * 30 + 16, 0) + application.length * 30;
+    return { card, index, title, sections, application, height, x: index % 2 === 0 ? 46 : width - cardWidth - 46, y: 0 };
+
   });
   const columns = [startY, startY];
   for (const c of cards) { c.y = columns[c.index % 2]; columns[c.index % 2] += c.height + 24; }
@@ -67,11 +70,14 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
     const ratio = Math.min(textWidth / cropW, 115 / cropH);
     rect(ctx, c.x + 24, y + 8, textWidth, 135, 10, '#f2f5f3');
     ctx.drawImage(image, cropX, cropY, cropW, cropH, c.x + 24 + (textWidth - cropW * ratio) / 2, y + 18 + (115 - cropH * ratio) / 2, cropW * ratio, cropH * ratio);
-    y += 172; ctx.font = font(21); ctx.fillStyle = muted; paragraph(ctx, c.description, c.x + 24, y, 30); y += c.description.length * 30 + 16;
-    ctx.fillStyle = ink; paragraph(ctx, c.instruction, c.x + 24, y, 30); y += c.instruction.length * 30 + 16;
-    ctx.fillStyle = blue; paragraph(ctx, c.application, c.x + 24, y, 30);
+    y += 170;
+    for (const section of c.sections) {
+      ctx.font = font(20, 650); ctx.fillStyle = blue; ctx.fillText(section.label, c.x + 24, y); y += 34;
+      ctx.font = font(21); ctx.fillStyle = ink; paragraph(ctx, section.rows, c.x + 24, y, 30); y += section.rows.length * 30 + 16;
+    }
+    ctx.font = font(21); ctx.fillStyle = muted; paragraph(ctx, c.application, c.x + 24, y, 30);
   }
-  ctx.font = font(20); ctx.fillStyle = muted; ctx.fillText('编号对应所选卡片，不代表优先级。不同特征存在依赖时，允许必要的协调调整；不复制参考图的品牌或业务数据。', 46, height - 49);
+  ctx.font = font(20); ctx.fillStyle = muted; ctx.fillText('按适用对象匹配现有组件；数值为观察估计或迁移建议，非精确测量。不适用时说明原因，不为套用特征新增业务模块。', 46, height - 49);
   const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('图片导出失败。')), 'image/png'));
   return { blob, width, height };
 }
