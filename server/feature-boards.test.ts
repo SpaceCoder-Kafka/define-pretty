@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT } from './feature-boards.ts';
+import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT, featureSchema } from './feature-boards.ts';
 import { FileStore } from './store.ts';
-import { featureInstruction } from '../shared/feature-board.ts';
+import { featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
 import type { Executor } from './runner.ts';
 
 const config = { model: 'test', reasoningEffort: 'medium', cliVersion: 'test' };
@@ -46,12 +46,16 @@ test('selection/instruction edits persist, reject stale writes, and exclude unse
 
 test('real generation contract snapshots input and keeps old cards when starting a new board', async () => {
   let observedPrompt = '';
-  const f = await fixture(async options => { observedPrompt = options.prompt; assert.equal(options.readOnly, true); return { exitCode: 0, summary: JSON.stringify({ cards: [generated] }), usage: { input_tokens: 10 } }; });
+  const { adaptation, ...modern } = generated;
+  modern.instruction += '\n' + adaptation;
+  const f = await fixture(async options => { observedPrompt = options.prompt; assert.equal(options.readOnly, true); return { exitCode: 0, summary: JSON.stringify({ cards: [modern] }), usage: { input_tokens: 10 } }; });
   try {
     await f.boards.generate(f.board.id);
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
     const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 1); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
+    assert.equal(input.cardFormat, 3); assert.equal(input.guidanceVersion, 4);
+    assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
     await assert.rejects(f.boards.generate(board.id), { status: 409 });
     const next = await f.boards.create(board.reference.id, config, board.title); assert.notEqual(next.id, board.id); assert.equal((await f.boards.get(board.id)).cards.length, 1);
   } finally { await f.cleanup(); }
@@ -101,7 +105,28 @@ test('transfer guidance survives saving and reaches selected instructions; legac
     const old = cardsInput([legacy])[0];
     assert.equal(old.instruction, legacy.instruction);
     assert.equal(old.adaptation, '');
-    assert.throws(() => cardsInput([{ ...generated, adaptation: undefined }], true));
+    assert.equal(cardsInput([{ ...generated, adaptation: undefined }], true)[0].adaptation, '');
     assert.throws(() => cardsInput([{ ...cards[0], effect: 'a'.repeat(161) }]));
+  } finally { await f.cleanup(); }
+});
+
+test('three-section cards preserve legacy adaptation through editing, saving and instructions without duplication', async () => {
+  const f = await fixture();
+  try {
+    const old = cardsInput([{ ...generated, instruction: '规'.repeat(600), adaptation: '适'.repeat(320) }], true)[0];
+    const before = structuredClone(old);
+    const sections = featureSections(old);
+    assert.deepEqual(sections.map(s => s.label), ['1．带来什么效果','2．怎么实现','3．适合用在哪里']);
+    assert.equal(sections[1].text, `${old.instruction}\n\n${old.adaptation}`);
+    assert.deepEqual(old, before);
+    const edited = { ...old, selected: true, instruction: featureImplementation(old), adaptation: '' };
+    const saved = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [edited] });
+    const persisted = await f.boards.get(saved.id);
+    assert.equal(featureImplementation(persisted.cards[0]), sections[1].text);
+    const prompt = featureInstruction(persisted);
+    assert.equal(prompt.split(old.adaptation!).length - 1, 1);
+    assert(!featureSchema.properties.cards.items.required.includes('adaptation'));
+    assert(!('adaptation' in featureSchema.properties.cards.items.properties));
+    assert.throws(() => cardsInput([{ ...edited, instruction: 'a'.repeat(1001) }]));
   } finally { await f.cleanup(); }
 });
