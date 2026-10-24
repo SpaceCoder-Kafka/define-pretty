@@ -10,6 +10,7 @@ import { type Bootstrap, type ExperimentInput, type GroupId, type Review, type R
 import { DEFAULT_BUSINESS_BRIEF, DEFAULT_DIMENSIONS } from '../shared/defaults.ts';
 import type { RunnerController } from './contracts.ts';
 import { FileStore } from './store.ts';
+import { FeatureBoards } from './feature-boards.ts';
 import { createSessionToken, detectImageType, localRequestGuard, previewHeaders, requireSafeId, safeFilePath } from './security.ts';
 
 function experimentInput(value: unknown, config: Bootstrap['defaults']['config']): ExperimentInput {
@@ -63,6 +64,7 @@ async function listFiles(root: string, prefix = '', limit = { count: 0 }): Promi
 }
 
 export interface AppOptions {
+  featureBoards?: FeatureBoards;
   highlights?: DimensionHighlights; comparisons?: VisualComparisons; store: FileStore; runner: RunnerController; generator?: SpecGenerator; consolePort: number; previewOrigin: string;
   config: Bootstrap['defaults']['config']; runtime: Bootstrap['runtime']; token?: string;
 }
@@ -75,6 +77,21 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', localRequestGuard(consolePort, token));
   app.use('/api', express.json({ limit: '512kb' }));
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } });
+
+  const boards = () => { if (!options.featureBoards) fail('视觉特征工作台尚未启用。', 503); return options.featureBoards!; };
+  app.get('/api/feature-boards', async (_req, res) => { res.json(await boards().list()); });
+  app.post('/api/feature-boards', async (req, res) => { res.status(201).json(await boards().create(requireSafeId(req.body?.referenceId), modelInput(req.body?.config, config), text(req.body?.title, '特征板名称', 100))); });
+  app.get('/api/feature-boards/:id', async (req, res) => { res.json(await boards().get(requireSafeId(req.params.id))); });
+  app.put('/api/feature-boards/:id', async (req, res) => { res.json(await boards().edit(requireSafeId(req.params.id), req.body ?? {})); });
+  app.post('/api/feature-boards/:id/generate', async (req, res) => {
+    if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。', 503);
+    res.status(202).json(await boards().generate(requireSafeId(req.params.id)));
+  });
+  app.post('/api/feature-boards/:id/cancel', async (req, res) => { res.json(await boards().cancel(requireSafeId(req.params.id))); });
+  app.get('/api/feature-boards/:id/evidence', async (req, res) => {
+    const id = requireSafeId(req.params.id); const board = await boards().get(id);
+    res.json({ config: board.config, status: board.status, usage: board.usage, error: board.error, input: await readText(path.join(boards().directory(id), 'input.json')), output: await readText(path.join(boards().directory(id), 'final.txt')) });
+  });
 
   const comparisons = options.comparisons ?? new VisualComparisons(store, consolePort);
   const highlights = options.highlights ?? new DimensionHighlights(store, comparisons);

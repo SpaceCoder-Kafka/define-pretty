@@ -2,6 +2,9 @@
   "name": "define-pretty", "private": true, "version": "0.1.0", "type": "module",
   "scripts": {
     "dev": "tsx server/index.ts", "build": "tsc --noEmit && vite build",
+    "dev:cards": "DEFINE_PRETTY_PORT=4193 DEFINE_PRETTY_PREVIEW_PORT=4194 DEFINE_PRETTY_DATA_DIR=.data/visual-cards tsx server/index.ts",
+    "build:cards": "tsc --noEmit && vite build --outDir dist/visual-cards",
+    "start:cards": "NODE_ENV=production DEFINE_PRETTY_PORT=4193 DEFINE_PRETTY_PREVIEW_PORT=4194 DEFINE_PRETTY_DATA_DIR=.data/visual-cards DEFINE_PRETTY_DIST_DIR=dist/visual-cards tsx server/index.ts",
     "start": "NODE_ENV=production tsx server/index.ts",
     "test": "tsx --test server/*.test.ts",
     "check": "tsc --noEmit"
