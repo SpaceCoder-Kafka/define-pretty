@@ -10,6 +10,9 @@ import { FileStore } from './store.ts';
 import { Runner } from './runner.ts';
 import { getRuntimeDefaults } from './runtime.ts';
 import { acquireDataDirectoryLock } from './data-lock.ts';
+import { FeatureBoards } from './feature-boards.ts';
+import { FeatureTests } from './feature-tests.ts';
+import { FeatureCompletions } from './feature-completions.ts';
 
 function port(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -49,17 +52,23 @@ export async function startServers() {
     throw error;
   }
   const { config, runtime } = startup;
+  const featureBoards = new FeatureBoards(store);
+  try { await featureBoards.initialize(); } catch (error) { await dataLock.release(); throw error; }
+  const featureTests = new FeatureTests(featureBoards, path.resolve(process.env.DEFINE_PRETTY_SOURCE_DATA_DIR || '.data'), previewOrigin);
+  try { await featureTests.initialize(); } catch (error) { await dataLock.release(); throw error; }
+  const featureCompletions = new FeatureCompletions(featureBoards, store);
+  try { await featureCompletions.initialize(); } catch (error) { await dataLock.release(); throw error; }
   const runner = new Runner({ store, previewOrigin });
   const generator = new SpecGenerator(store);
   const comparisons = new VisualComparisons(store, consolePort);
   const highlights = new DimensionHighlights(store, comparisons);
-  const app = createApp({ highlights, comparisons, store, runner, generator, consolePort, previewOrigin, config, runtime });
+  const app = createApp({ featureCompletions, featureTests, featureBoards, highlights, comparisons, store, runner, generator, consolePort, previewOrigin, config, runtime });
   const server = createServer(app);
-  const previewServer = createServer(createPreviewApp(store, consolePort));
+  const previewServer = createServer(createPreviewApp(store, consolePort, featureTests));
   let vite: Awaited<ReturnType<typeof import('vite')['createServer']>> | undefined;
   try {
     if (process.env.NODE_ENV === 'production') {
-      const directory = path.resolve('dist');
+      const directory = path.resolve(process.env.DEFINE_PRETTY_DIST_DIR || 'dist');
       app.use(express.static(directory));
       app.get('/{*path}', (_req, res) => res.sendFile(path.join(directory, 'index.html')));
     } else {
@@ -76,6 +85,9 @@ export async function startServers() {
     await comparisons.shutdown();
     await runner.shutdown();
     await generator.shutdown();
+    await featureTests.shutdown();
+    await featureCompletions.shutdown();
+    await featureBoards.shutdown();
     await dataLock.release();
     throw error;
   }
@@ -85,9 +97,12 @@ export async function startServers() {
   const shutdown = () => closing ??= (async () => {
     try {
       await highlights.shutdown();
-    await comparisons.shutdown();
-    await runner.shutdown();
-    await generator.shutdown();
+      await comparisons.shutdown();
+      await runner.shutdown();
+      await generator.shutdown();
+      await featureTests.shutdown();
+      await featureCompletions.shutdown();
+      await featureBoards.shutdown();
       await vite?.close();
       await Promise.all([close(server), close(previewServer)]);
     } finally { await dataLock.release(); }
