@@ -77,7 +77,7 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
     }
     ctx.font = font(21); ctx.fillStyle = muted; paragraph(ctx, c.application, c.x + 24, y, 30);
   }
-  ctx.font = font(20); ctx.fillStyle = muted; ctx.fillText('按适用对象匹配现有组件；数值为观察估计或迁移建议，非精确测量。不适用时说明原因，不为套用特征新增业务模块。', 46, height - 49);
+  ctx.font = font(20); ctx.fillStyle = muted; ctx.fillText('按组件用途与内容结构匹配现有界面；数值为观察估计或迁移建议，非精确测量。不适用时说明原因，不为套用特征新增业务模块。', 46, height - 49);
   const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('图片导出失败。')), 'image/png'));
   return { blob, width, height };
 }
