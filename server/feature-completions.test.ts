@@ -7,6 +7,7 @@ import { FileStore } from './store.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FeatureCompletions } from './feature-completions.ts';
 import type { Executor } from './codex.ts';
+import type { FeatureSpec } from '../shared/feature-spec.ts';
 import { layoutDiagramSchema, parseLayoutDiagram, type LayoutDiagram } from '../shared/layout-diagram.ts';
 
 const config={model:'test',reasoningEffort:'medium',cliVersion:'test'};
@@ -16,6 +17,7 @@ const layout:LayoutDiagram={aspectRatio:1.6,blocks:[
   {label:'主内容约 56%',x:.05,y:.15,width:.7,height:.8,role:'main'},
   {label:'重点摘要约 10%',x:.63,y:.28,width:.32,height:.3,role:'highlight'},
 ]};
+const proportionalLayout = parseLayoutDiagram({ ...layout, proportions: [{ type: 'relative', block: 2, reference: 1, widthPercent: 46, heightPercent: 38, offsetXPercent: 82, offsetYPercent: 16 }] });
 const png=Buffer.from('89504e470d0a1a0a0000000d494844520000000100000001','hex');
 async function fixture(executor:Executor,timeout=1000){
   const dir=await mkdtemp(path.join(os.tmpdir(),'pretty-completion-')),store=new FileStore(dir);await store.initialize();
@@ -66,7 +68,7 @@ test('layout completion returns a validated proportion diagram as a draft withou
     const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));
     assert.deepEqual(schema.required,['description','effect','instruction','applicability','layout']);
     assert.deepEqual(schema.properties.layout,layoutDiagramSchema);
-    return {exitCode:0,summary:JSON.stringify({...result,layout}),usage:{output_tokens:30}};
+    return {exitCode:0,summary:JSON.stringify({...result,layout:proportionalLayout}),usage:{output_tokens:30}};
   });
   try {
     const board=await f.boards.edit(f.board.id,{revision:f.board.revision,title:f.board.title,cards:[{...f.board.cards[0],kind:'layout'}]});
@@ -74,16 +76,16 @@ test('layout completion returns a validated proportion diagram as a draft withou
     const job=await f.jobs.start(board.id,{...f.input,revision:board.revision},config);
     await waitFor(async()=>!['running','checking'].includes((await f.jobs.get(job.id)).status));
     const done=await f.jobs.get(job.id);
-    assert.equal(done.status,'completed',done.error);assert.deepEqual(done.result,{...result,layout});
+    assert.equal(done.status,'completed',done.error);assert.deepEqual(done.result,{...result,layout:proportionalLayout});
     assert.match(prompt,/比例色块图/);assert.match(prompt,/不生成候选方案/);assert.match(prompt,/不是精确测量/);
     assert.deepEqual(done.region,f.input.region);assert.deepEqual(f.crops,[f.input.region]);
     assert.deepEqual(await readFile(path.join(f.boards.directory(board.id),'board.json')),before);
-    const restarted=new FeatureCompletions(f.boards,f.store);await restarted.initialize();assert.deepEqual((await restarted.get(job.id)).result?.layout,layout);
+    const restarted=new FeatureCompletions(f.boards,f.store);await restarted.initialize();assert.deepEqual((await restarted.get(job.id)).result?.layout,proportionalLayout);
   }finally{await f.cleanup();}
 });
 
 test('missing or invalid layout diagrams fail completion without returning partial rules or overwriting the card',async()=>{
-  for(const diagram of [undefined,null,{...layout,blocks:[{...layout.blocks[0],x:.8,width:.9},layout.blocks[1]]}]) {
+  for(const diagram of [undefined,null,layout,{...proportionalLayout,proportions:[]},{...layout,blocks:[{...layout.blocks[0],x:.8,width:.9},layout.blocks[1]]}]) {
     const f=await fixture(async()=>({exitCode:0,summary:JSON.stringify({...result,layout:diagram})}));
     try {
       const board=await f.boards.edit(f.board.id,{revision:f.board.revision,title:f.board.title,cards:[{...f.board.cards[0],kind:'layout'}]});
@@ -133,5 +135,86 @@ test('global completion uses the full reference and global guidance without chan
     assert(!prompt.includes('不扩大为整页改造'));
     assert(!prompt.includes('本次生成一个完整特征板'));
     assert.deepEqual((await f.boards.get(board.id)).cards.find(c => c.id === local.id), local);
+  } finally { await f.cleanup(); }
+});
+
+const paletteSpec: FeatureSpec = { kind: 'palette', basis: '页面内颜色的观察估计。', colors: [
+  { role: 'page-background', label: '页面底色', hex: '#F5F5F7', usage: '整个页面', areaPercent: 70, evidence: 'estimated' },
+  { role: 'text-primary', label: '主要文字', hex: '#111111', usage: '标题与正文', areaPercent: null, evidence: 'estimated' },
+] };
+const specificationCases: FeatureSpec[] = [
+  paletteSpec,
+  { kind: 'typography', basis: '字形采用相近候选，尺度按截图估计。', referenceWidth: 1000, rows: [
+    { role: 'page-title', label: '页面标题', fontFamily: 'sans-serif', fontEvidence: 'suggested', sizePx: 32, weight: 700, lineHeightPx: 40, letterSpacingEm: 0, evidence: 'estimated' },
+    { role: 'body', label: '正文', fontFamily: 'sans-serif', fontEvidence: 'suggested', sizePx: 14, weight: 400, lineHeightPx: 22, letterSpacingEm: 0, evidence: 'estimated' },
+  ] },
+  { kind: 'spacing', basis: '内容间距按完整图估计。', referenceWidth: 1000, rows: [{ label: '模块间距', value: 24, unit: 'px', reference: '内容宽 1000px', usage: '内容模块之间', evidence: 'estimated' }] },
+  { kind: 'attributes', basis: '可见的硬边阴影。', rows: [{ property: '阴影', value: '6px 6px 0 #111111', scope: '重点内容卡', evidence: 'estimated' }] },
+];
+
+test('foundation and signature completion returns only the matching specification as a draft', async () => {
+  for (const spec of specificationCases) {
+    const isLayout = spec.kind === 'spacing';
+    let observedPrompt = '';
+    const output = { ...result, spec, ...(isLayout ? { layout: proportionalLayout } : {}) };
+    const f = await fixture(async options => {
+      observedPrompt = options.prompt;
+      const schema = JSON.parse(await readFile(options.outputSchema!, 'utf8'));
+      assert.deepEqual(schema.properties.spec.properties.kind.enum, [spec.kind]);
+      assert(schema.required.includes('spec'));
+      assert.equal(schema.required.includes('layout'), isLayout);
+      return { exitCode: 0, summary: JSON.stringify(output) };
+    });
+    try {
+      const foundation = spec.kind === 'spacing' ? 'layout' : spec.kind === 'attributes' ? undefined : spec.kind;
+      const board = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [{
+        ...f.board.cards[0], kind: isLayout ? 'layout' : 'local', tier: foundation ? 'foundation' : 'signature', foundation, spec,
+        ...(isLayout ? { layout: proportionalLayout } : {}),
+      }] });
+      const before = structuredClone(board);
+      const job = await f.jobs.start(board.id, { ...f.input, revision: board.revision }, config);
+      await waitFor(async () => !['running','checking'].includes((await f.jobs.get(job.id)).status));
+      const done = await f.jobs.get(job.id);
+      assert.equal(done.status, 'completed', done.error);
+      assert.deepEqual(done.result, output);
+      assert(observedPrompt.includes(`spec.kind="${spec.kind}"`));
+      assert(observedPrompt.includes('保持分类不变'));
+      assert.deepEqual(await f.boards.get(board.id), before);
+      const restarted = new FeatureCompletions(f.boards, f.store); await restarted.initialize();
+      assert.deepEqual((await restarted.get(job.id)).result, output);
+    } finally { await f.cleanup(); }
+  }
+});
+
+test('invalid or missing required completion parameters fail atomically and leave selected originals unchanged', async () => {
+  const invalid = [undefined, null, specificationCases[3], { ...paletteSpec, colors: [] }];
+  for (const spec of invalid) {
+    const f = await fixture(async () => ({ exitCode: 0, summary: JSON.stringify({ ...result, spec }) }));
+    try {
+      const board = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [{ ...f.board.cards[0], kind: 'local', tier: 'foundation', foundation: 'palette', spec: paletteSpec }] });
+      const job = await f.jobs.start(board.id, { ...f.input, revision: board.revision }, config);
+      await waitFor(async () => (await f.jobs.get(job.id)).status === 'failed');
+      assert.equal((await f.jobs.get(job.id)).result, undefined);
+      assert.deepEqual(await f.boards.get(board.id), board);
+    } finally { await f.cleanup(); }
+  }
+});
+
+test('detail completion explicitly clears an obsolete parameter table without mutating the saved card', async () => {
+  const oldSpec = specificationCases[3];
+  const f = await fixture(async options => {
+    const schema = JSON.parse(await readFile(options.outputSchema!, 'utf8'));
+    assert(schema.required.includes('spec'));
+    assert(schema.properties.spec.anyOf.some((item: { type?: string }) => item.type === 'null'));
+    return { exitCode: 0, summary: JSON.stringify({ ...result, spec: null }) };
+  });
+  try {
+    const board = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [{ ...f.board.cards[0], kind: 'local', tier: 'detail', spec: oldSpec }] });
+    const job = await f.jobs.start(board.id, { ...f.input, revision: board.revision }, config);
+    await waitFor(async () => (await f.jobs.get(job.id)).status === 'completed');
+    assert.equal((await f.jobs.get(job.id)).result?.spec, null);
+    assert.deepEqual((await f.boards.get(board.id)).cards[0].spec, oldSpec);
+    const restarted = new FeatureCompletions(f.boards, f.store); await restarted.initialize();
+    assert.equal((await restarted.get(job.id)).result?.spec, null);
   } finally { await f.cleanup(); }
 });

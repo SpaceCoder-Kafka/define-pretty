@@ -9,6 +9,8 @@ import { FeatureBoards } from './feature-boards.ts';
 import { FileStore } from './store.ts';
 import { hashWebsite, type Executor } from './codex.ts';
 import { featureInstruction } from '../shared/feature-board.ts';
+import { parseLayoutDiagram } from '../shared/layout-diagram.ts';
+import type { PaletteSpec } from '../shared/feature-spec.ts';
 import { builtinSourceCatalog, builtinWebsiteRoot } from './builtin-sources.ts';
 import { createApp, createPreviewApp } from './http.ts';
 const config={model:'test',reasoningEffort:'medium',cliVersion:'test'};
@@ -26,11 +28,42 @@ async function fixture(executor?:Executor, timeout=1000) {
   return {dir,main,html,hash,board,boards,store,tests,cleanup:async()=>{await tests.shutdown();await boards.shutdown();await rm(dir,{recursive:true,force:true});}};
 }
 async function done(fn:()=>Promise<boolean>){for(let i=0;i<200;i++){if(await fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('did not finish');}
+test('selected palette parameters reach one implementation call with priority and no unselected specs or layout authority', async () => {
+  const palette: PaletteSpec = { kind: 'palette', basis: '页面区域观察估计', colors: [
+    { role: 'page-background', label: '纸面', hex: '#FAF9F3', usage: '整页内容底色', areaPercent: 80, evidence: 'estimated' },
+    { role: 'text-primary', label: '主要文字', hex: '#222222', usage: '标题与正文', areaPercent: null, evidence: 'estimated' },
+  ] };
+  let calls = 0;
+  const f = await fixture(async options => {
+    calls++;
+    assert(options.prompt.includes(JSON.stringify(palette)));
+    assert.match(options.prompt, /一级基础规范 > 二级辨识特征 > 三级精细细节/);
+    assert.match(options.prompt, /未选中布局结构卡/);
+    assert.match(options.prompt, /应用区域：整页背景/);
+    assert(!options.prompt.includes('PRIVATE-SIGNATURE'));
+    assert(!options.prompt.includes('#F12345'));
+    await writeFile(path.join(options.cwd, 'website/index.html'), '<main style="background:#FAF9F3;color:#222222">保留原业务内容</main>');
+    return { exitCode: 0, summary: '已应用页面与文字颜色。' };
+  });
+  try {
+    const base = f.board.cards[0];
+    const board = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [
+      { ...base, kind: 'local', tier: 'foundation', foundation: 'palette', application: '', spec: palette },
+      { ...base, id: 'unselected', kind: 'local', tier: 'signature', selected: false, spec: { kind: 'attributes', basis: 'PRIVATE-SIGNATURE', rows: [{ property: '阴影', value: '4px 4px 0 #F12345', scope: '卡片', evidence: 'estimated' }] } },
+    ] });
+    const run = await f.tests.start(board.id, board.revision, png, config);
+    await done(async () => !['running', 'checking'].includes((await f.tests.get(run.id)).status));
+    const result = await f.tests.get(run.id);
+    assert.equal(result.status, 'completed', result.error);
+    assert.equal(calls, 1);
+    assert.deepEqual(result.board.cards[0].spec, palette);
+  } finally { await f.cleanup(); }
+});
 test('selected layout and global cards directly implement the approved rules in one model call',async()=>{
-  const diagram={aspectRatio:1.6,blocks:[
+  const diagram=parseLayoutDiagram({aspectRatio:1.6,blocks:[
     {label:'LAYOUT-MAIN-REGION',x:.05,y:.15,width:.7,height:.8,role:'main'},
     {label:'LAYOUT-HIGHLIGHT-REGION',x:.63,y:.28,width:.32,height:.3,role:'highlight'},
-  ]};
+  ], proportions:[{type:'relative',block:1,reference:0,widthPercent:46,heightPercent:38,offsetXPercent:82,offsetYPercent:16}]});
   for(const selection of ['layout','global','both']) {
     let calls=0,observedPrompt='';
     const f=await fixture(async options=>{
@@ -54,6 +87,7 @@ test('selected layout and global cards directly implement the approved rules in 
       assert.equal(observedPrompt,result.prompt);assert(result.prompt.endsWith(featureInstruction(board)));
       assert.equal(observedPrompt.includes('LAYOUT-APPROVED-RELATION'),selection!=='global');
       assert.equal(observedPrompt.includes(JSON.stringify(diagram)),selection!=='global');
+      assert.equal(observedPrompt.includes('46%'),selection!=='global');
       assert.equal(observedPrompt.includes('GLOBAL-APPROVED-RELATION'),selection!=='layout');
       assert.match(observedPrompt,/仅经历区域/);
       assert.equal(Object.hasOwn(result,'layoutPlan'),false);assert.equal(Object.hasOwn(result,'phase'),false);
