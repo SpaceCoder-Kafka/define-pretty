@@ -51,3 +51,22 @@ test('overlap, cancellation, timeout and restart preserve terminal states withou
     assert.equal((await f.boards.get(f.board.id)).revision,f.board.revision);
   }finally{await f.cleanup();}
 });
+
+test('global completion uses the full reference and global guidance without changing existing local cards', async () => {
+  let prompt = '';
+  const f = await fixture(async options => { prompt = options.prompt; return { exitCode: 0, summary: JSON.stringify(result) }; });
+  try {
+    const local = structuredClone(f.board.cards[0]);
+    const board = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [local, { ...local, id: 'global', kind: 'global', instruction: '', effect: '', applicability: '', selected: false }] });
+    const job = await f.jobs.start(board.id, { ...f.input, cardId: 'global', revision: board.revision }, config);
+    await waitFor(async () => (await f.jobs.get(job.id)).status === 'completed');
+    const done = await f.jobs.get(job.id);
+    assert.equal(done.title, '整体视觉风格');
+    assert.deepEqual(done.region, { x: 0, y: 0, width: 1, height: 1 });
+    assert.deepEqual(f.crops, [done.region]);
+    assert.match(prompt, /独立的整页卡片/);
+    assert(!prompt.includes('不扩大为整页改造'));
+    assert(!prompt.includes('本次生成一个完整特征板'));
+    assert.deepEqual((await f.boards.get(board.id)).cards.find(c => c.id === local.id), local);
+  } finally { await f.cleanup(); }
+});

@@ -36,9 +36,9 @@ export function previewCsp(consolePort: number) {
   return [
       "default-src 'none'",
       "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https:",
       "img-src 'self' data: blob:",
-      "font-src 'self' data:",
+      "font-src 'self' data: https:",
       "connect-src 'none'",
       "object-src 'none'",
       "base-uri 'none'",

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { FeatureBoards } from './feature-boards.ts';
-import type { FeatureTests } from './feature-tests.ts';
+import { allowedPreviewResource, type FeatureTests } from './feature-tests.ts';
 
 import { createApp, createPreviewApp } from './http.ts';
 import { FileStore } from './store.ts';
@@ -70,6 +70,9 @@ test('preview never exposes API or traverses the artifact root and is sandboxed'
     const response = await fetch(`${origin}/feature-tests/runs/result/index.html`);
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-security-policy') ?? '', /connect-src 'none'/);
+    assert.match(response.headers.get('content-security-policy') ?? '', /font-src 'self' data: https:/);
+    assert.match(response.headers.get('content-security-policy') ?? '', /style-src 'self' 'unsafe-inline' https:/);
+    assert.match(response.headers.get('content-security-policy') ?? '', /script-src 'self' 'unsafe-inline';/);
     assert.match(response.headers.get('content-security-policy') ?? '', /sandbox allow-scripts/);
     assert.doesNotMatch(response.headers.get('content-security-policy') ?? '', /allow-same-origin/);
     assert.equal((await fetch(`${origin}/api/bootstrap`)).status, 404);
@@ -85,4 +88,17 @@ test('reference uploads distinguish supported image bytes from filename claims',
   assert.equal(detectImageType(png)?.mimeType, 'image/png');
   assert.equal(detectImageType(Buffer.from('<svg/>')), undefined);
   assert.equal(detectImageType(Buffer.from([0xff, 0xd8])), undefined);
+});
+
+
+test('runtime checks allow HTTPS font resources while rejecting unrelated remote requests', () => {
+  const origin = 'http://127.0.0.1:4194';
+  for (const type of ['font', 'stylesheet']) {
+    assert(allowedPreviewResource(new URL('https://fonts.example/resource'), origin, type));
+    assert(!allowedPreviewResource(new URL('http://fonts.example/resource'), origin, type));
+  }
+  for (const type of ['script', 'image', 'fetch', 'xhr', 'document']) {
+    assert(!allowedPreviewResource(new URL('https://fonts.example/resource'), origin, type));
+    assert(allowedPreviewResource(new URL(origin + '/resource'), origin, type));
+  }
 });

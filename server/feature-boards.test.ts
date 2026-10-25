@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT, featureSchema } from './feature-boards.ts';
 import { FileStore } from './store.ts';
-import { featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
+import { FULL_IMAGE_REGION, featureReady, featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
 import type { Executor } from './codex.ts';
 
 const config = { model: 'test', reasoningEffort: 'medium', cliVersion: 'test' };
@@ -48,13 +48,13 @@ test('real generation contract snapshots input and keeps old cards when starting
   let observedPrompt = '';
   const { adaptation, ...modern } = generated;
   modern.instruction += '\n' + adaptation;
-  const f = await fixture(async options => { observedPrompt = options.prompt; assert.equal(options.readOnly, true); return { exitCode: 0, summary: JSON.stringify({ cards: [modern] }), usage: { input_tokens: 10 } }; });
+  const f = await fixture(async options => { observedPrompt = options.prompt; assert.equal(options.readOnly, true); return { exitCode: 0, summary: JSON.stringify({ cards: [{ ...modern, kind: 'global' }] }), usage: { input_tokens: 10 } }; });
   try {
     await f.boards.generate(f.board.id);
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
     const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 1); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
-    assert.equal(input.cardFormat, 3); assert.equal(input.guidanceVersion, 4);
+    assert.equal(input.cardFormat, 4); assert.equal(input.guidanceVersion, 6);
     assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
     await assert.rejects(f.boards.generate(board.id), { status: 409 });
     const next = await f.boards.create(board.reference.id, config, board.title); assert.notEqual(next.id, board.id); assert.equal((await f.boards.get(board.id)).cards.length, 1);
@@ -128,5 +128,45 @@ test('three-section cards preserve legacy adaptation through editing, saving and
     assert(!featureSchema.properties.cards.items.required.includes('adaptation'));
     assert(!('adaptation' in featureSchema.properties.cards.items.properties));
     assert.throws(() => cardsInput([{ ...edited, instruction: 'a'.repeat(1001) }]));
+  } finally { await f.cleanup(); }
+});
+
+
+test('global style is a single fixed full-image card, remains optional, and directs the selected transfer scope', async () => {
+  const f = await fixture();
+  try {
+    const local = cardsInput([generated], true)[0];
+    const global = cardsInput([{ ...generated, kind: 'global' }], true)[0];
+    assert.equal(global.title, '整体视觉风格');
+    assert.deepEqual(global.region, FULL_IMAGE_REGION);
+    assert.equal(global.selected, false);
+    assert.throws(() => cardsInput([global, { ...global, id: 'duplicate' }]));
+    const blank = { ...global, instruction: '', effect: '', applicability: '', selected: true };
+    assert.equal(featureReady(blank), false);
+    assert.equal(cardsInput([blank])[0].selected, false);
+    const saved = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [{ ...local, selected: true }, global] });
+    assert.equal(saved.cards[0].kind, 'global');
+    assert.match(featureInstruction(saved), /未选中“整体视觉风格”/);
+    assert(!featureInstruction(saved).includes('1. 整体视觉风格'));
+    saved.cards[0].selected = true;
+    const selected = featureInstruction(saved);
+    assert.match(selected, /已选中“整体视觉风格”/);
+    assert.match(selected, /整页视觉协调/);
+    assert.match(selected, /未选择的局部卡片/);
+    assert.match(selected, /1. 整体视觉风格/);
+    await assert.rejects(f.boards.edit(saved.id, { revision: saved.revision, title: saved.title, cards: [local] }), /固定卡片/);
+    const edited = await f.boards.edit(saved.id, { revision: saved.revision, title: saved.title, cards: saved.cards });
+    assert.equal((await f.boards.get(edited.id)).cards[0].selected, true);
+  } finally { await f.cleanup(); }
+});
+
+test('generation missing global style fails without accepting a misleading partial board', async () => {
+  const f = await fixture(async () => ({ exitCode: 0, summary: JSON.stringify({ cards: [{ ...generated, kind: 'local' }] }) }));
+  try {
+    await f.boards.generate(f.board.id);
+    await waitFor(async () => (await f.boards.get(f.board.id)).status === 'failed');
+    const board = await f.boards.get(f.board.id);
+    assert.match(board.error!, /整体视觉风格/);
+    assert.deepEqual(board.cards, []);
   } finally { await f.cleanup(); }
 });

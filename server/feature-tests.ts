@@ -13,6 +13,10 @@ import { fail } from './input.ts';
 
 const activeStatus = (status: string) => ['queued','running','checking'].includes(status);
 export type TestChecker = (url: string, signal: AbortSignal) => Promise<void>;
+export function allowedPreviewResource(target: URL, origin: string, resourceType: string): boolean {
+  return target.origin === origin || !['http:', 'https:'].includes(target.protocol) ||
+    (target.protocol === 'https:' && ['font', 'stylesheet'].includes(resourceType));
+}
 export const checkFeatureTest: TestChecker = async (url, signal) => {
   const browser = await chromium.launch({ executablePath: await chromeExecutable(), headless: true });
   const close = () => { void browser.close(); }; signal.addEventListener('abort', close, { once: true });
@@ -22,14 +26,22 @@ export const checkFeatureTest: TestChecker = async (url, signal) => {
     const errors: string[] = [];
     await page.route('**/*', async route => {
       const target = new URL(route.request().url());
-      if (['http:','https:'].includes(target.protocol) && target.origin !== new URL(url).origin) { errors.push('页面尝试加载外部资源'); await route.abort(); }
+      if (!allowedPreviewResource(target, new URL(url).origin, route.request().resourceType())) { errors.push(`页面尝试加载不允许的外部资源：${target.href}`); await route.abort(); }
       else await route.continue();
     });
     page.on('pageerror', error => errors.push(error.message));
-    page.on('response', response => { if (response.status() >= 400) errors.push(`资源 HTTP ${response.status()}`); });
-    page.on('requestfailed', request => errors.push(request.failure()?.errorText || '资源请求失败'));
+    page.on('response', response => { if (response.status() >= 400) errors.push(`资源 HTTP ${response.status()}：${response.url()}`); });
+    page.on('requestfailed', request => errors.push(`${request.failure()?.errorText || '资源请求失败'}：${request.url()}`));
     const response = await page.goto(url, { waitUntil: 'load', timeout: 20000 });
     await page.waitForTimeout(300);
+    const fontErrors = await page.evaluate(async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([document.fonts.ready, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('字体加载超时。')), 15000); })]);
+        return [...document.fonts].filter(font => font.status === 'error').map(font => `字体加载失败：${font.family}`);
+      } finally { clearTimeout(timer); }
+    });
+    errors.push(...fontErrors);
     if (!response?.ok() || errors.length) throw new Error(`网页加载检查未通过：${errors.slice(0,3).join('；') || response?.status()}`);
   } finally { signal.removeEventListener('abort', close); await browser.close(); }
 };
@@ -95,7 +107,7 @@ export class FeatureTests {
       const id=randomUUID(), dir=this.directory(id); await mkdir(this.workDirectory(id),{recursive:true});
       await cp(this.sourceDirectory(source.runId),this.websiteDirectory(id),{recursive:true});
       if(await hashWebsite(this.websiteDirectory(id))!==source.hash) fail('测试副本校验失败。',409);
-      const prompt=`website/ 中已有一份完整的项目管理网页，请直接修改这个副本。交付保持自包含的 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html，使用相对路径引用资源。\n\n${featureInstruction(board)}`;
+      const prompt=`website/ 中已有一份完整的项目管理网页，请直接修改这个副本。交付静态 HTML、CSS、JavaScript，入口为 website/index.html。本地资源使用相对路径；字体是允许的外部依赖，可以通过 HTTPS 字体样式表或 @font-face 直接加载远程字体。其他资源仍保持本地化，不引入远程脚本或业务接口。\n\n${featureInstruction(board)}`;
       const run: FeatureTest={id,boardId,boardRevision:revision,board,source,config,prompt,imageHash:createHash('sha256').update(image).digest('hex'),createdAt:new Date().toISOString(),status:'running',hasPreview:false};
       await writeFile(path.join(dir,'reference.png'),image); await writeFile(path.join(dir,'prompt.txt'),prompt); await writeFile(path.join(dir,'input.json'),JSON.stringify(run,null,2));
       if(this.stopped) { run.status='interrupted'; run.error='服务停止，测试未启动。'; await this.persist(run); return run; }

@@ -1,4 +1,4 @@
-import { featureSections, selectedFeatures, type FeatureBoard } from '../shared/feature-board';
+import { featureSections, featureApplication, selectedFeatures, type FeatureBoard } from '../shared/feature-board';
 
 export function loadReference(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('参考图片无法读取，请重新上传。')); img.src = url; });
@@ -35,7 +35,7 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
       ctx.font = font(21); return { ...section, rows: lines(ctx, section.text, textWidth) };
     });
     ctx.font = font(21);
-    const application = lines(ctx, card.application ? `指定区域：${card.application}` : '应用区域：按组件用途匹配现有界面', textWidth);
+    const application = lines(ctx, `应用区域：${featureApplication(card)}`, textWidth);
     const height = 240 + title.length * 34 + sections.reduce((sum, section) => sum + 34 + section.rows.length * 30 + 16, 0) + application.length * 30;
     return { card, index, title, sections, application, height, x: index % 2 === 0 ? 46 : width - cardWidth - 46, y: 0 };
 
@@ -51,7 +51,7 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
   ctx.font = font(20, 600); ctx.fillStyle = blue; ctx.fillText('DEFINE PRETTY  /  视觉参考', 46, 52);
   ctx.font = font(40, 700); ctx.fillStyle = ink;
   const heading = lines(ctx, board.title, width - 100); ctx.fillText(heading[0] + (heading.length > 1 ? '…' : ''), 46, 110);
-  ctx.font = font(23); ctx.fillStyle = muted; ctx.fillText(`仅迁移编号 1–${selected.length} 的所选特征 · 其余画面仅作上下文 · 保留目标网页的业务内容与功能`, 46, 157);
+  ctx.font = font(23); ctx.fillStyle = muted; ctx.fillText(`仅迁移编号 1–${selected.length} 的所选特征 · ${selected.some(c => c.kind === 'global') ? '含整页风格协调' : '其余画面仅作上下文'} · 保留目标网页的业务内容与功能`, 46, 157);
   const imageX = (width - actualWidth) / 2, imageY = startY + (contentBottom - startY - imageHeight) / 2;
   rect(ctx, imageX - 14, imageY - 14, actualWidth + 28, imageHeight + 28, 20, '#ffffff', '#dfe6e2');
   ctx.drawImage(image, imageX, imageY, actualWidth, imageHeight);
