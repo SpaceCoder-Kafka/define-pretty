@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="FlowAI 智能创作平台演示页面。">
+  <title>FlowAI - 让 AI 释放你的无限潜能</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: Arial, "Microsoft YaHei", sans-serif; color: #333; background: #fff; line-height: 1.6; }
+    a { color: inherit; text-decoration: none; }
+    button, textarea { font: inherit; }
+    button, .button { cursor: pointer; }
+    a:focus-visible, button:focus-visible, textarea:focus-visible { outline: 3px solid #edb92f; outline-offset: 4px; }
+    .container { width: calc(100% - 48px); max-width: 1200px; margin: 0 auto; }
+    header { background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+    .navigation { min-height: 80px; display: flex; justify-content: space-between; align-items: center; gap: 25px; }
+    .logo { color: #667eea; font-size: 30px; font-weight: bold; }
+    nav { display: flex; align-items: center; gap: 35px; font-size: 16px; font-weight: bold; }
+    nav a:hover { color: #764ba2; }
+    .nav-button { color: #fff; background: linear-gradient(135deg,#667eea,#764ba2); padding: 10px 25px; border-radius: 25px; }
+    nav .nav-button:hover { color: #fff; }
+    .hero { color: #fff; text-align: center; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); padding: 84px 24px 91px; }
+    .hero h1 { font-size: 48px; font-weight: 700; line-height: 1.4; margin-bottom: 20px; }
+    .hero p { font-size: 20px; opacity: .93; margin-bottom: 35px; }
+    .buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; }
+    .button { display: inline-block; border: 2px solid transparent; border-radius: 30px; padding: 13px 34px; font-size: 16px; font-weight: bold; transition: transform .2s, box-shadow .2s; }
+    .button:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+    .button-white { color: #667eea; background: #fff; box-shadow: 0 5px 15px rgba(0,0,0,.15); }
+    .button-outline { color: #fff; background: transparent; border-color: #fff; }
+    .button-purple { color: #fff; background: linear-gradient(135deg,#667eea,#764ba2); }
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 30px; text-align: center; padding: 30px 0; background: #f8f9fa; border-bottom: 1px solid #eee; }
+    .stat-number { display: block; font-size: 36px; font-weight: bold; color: #667eea; }
+    .stat-label { font-size: 15px; color: #666; }
+    section { padding: 66px 0; scroll-margin-top: 24px; }
+    .section-title { text-align: center; font-size: 32px; margin-bottom: 12px; }
+    .section-subtitle { text-align: center; color: #777; margin-bottom: 40px; font-size: 16px; }
+    .cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 30px; }
+    .card { padding: 30px 25px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,.1); text-align: center; background: #fff; transition: transform .2s; }
+    .card:hover { transform: translateY(-5px); }
+    .feature-icon { font-size: 48px; line-height: 1.2; margin-bottom: 20px; }
+    .card h3 { font-size: 22px; margin-bottom: 15px; }
+    .card p { color: #666; font-size: 16px; }
+    .pricing { background: #f8f9fa; }
+    .price-card { position: relative; padding: 35px 25px; }
+    .price-card.popular { border: 2px solid #667eea; }
+    .popular-label { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); padding: 4px 25px; color: #fff; background: linear-gradient(135deg,#667eea,#764ba2); border-radius: 20px; font-size: 14px; white-space: nowrap; }
+    .price { color: #667eea; font-size: 40px; font-weight: bold; margin: 15px 0 20px; }
+    .price span { color: #888; font-size: 14px; font-weight: normal; }
+    .price-card ul { list-style: none; margin-bottom: 25px; }
+    .price-card li { padding: 8px 0; color: #666; }
+    .price-card .button { width: 100%; }
+    .demo-box { max-width: 800px; margin: 0 auto; padding: 35px; box-shadow: 0 5px 20px rgba(0,0,0,.1); border-radius: 15px; background: #fff; }
+    label { display: block; font-weight: bold; margin-bottom: 12px; }
+    textarea { resize: vertical; width: 100%; min-height: 120px; border: 1px solid #ddd; border-radius: 8px; padding: 15px; color: #333; }
+    .demo-box .button { margin-top: 20px; }
+    .hint { font-size: 13px; color: #777; margin-top: 14px; }
+    .result { white-space: pre-wrap; margin-top: 25px; padding: 20px; border-left: 4px solid #667eea; background: #f3f2ff; border-radius: 5px; }
+    .result h3 { color: #667eea; margin-bottom: 10px; }
+    .cta { text-align: center; color: #fff; background: linear-gradient(135deg,#667eea,#764ba2); padding: 60px 24px; }
+    .cta h2 { font-size: 32px; margin-bottom: 15px; }
+    .cta p { margin-bottom: 25px; font-size: 18px; }
+    footer { text-align: center; background: #333; color: #ccc; padding: 30px 24px; font-size: 14px; }
+    footer p + p { margin-top: 8px; font-size: 12px; color: #aaa; }
+    @media (max-width: 700px) {
+      .container { width: calc(100% - 32px); }
+      .navigation { padding: 15px 0; flex-direction: column; gap: 12px; }
+      nav { gap: 18px; font-size: 14px; flex-wrap: wrap; justify-content: center; }
+      .nav-button { padding: 7px 17px; }
+      .hero { padding: 58px 20px 65px; }
+      .hero h1 { font-size: 34px; }
+      .hero p { font-size: 17px; }
+      .buttons { gap: 12px; }
+      .button { padding: 12px 25px; }
+      .stats { gap: 8px; padding: 25px 10px; }
+      .stat-number { font-size: 25px; }
+      .stat-label { font-size: 12px; }
+      section { padding: 45px 0; }
+      .section-title, .cta h2 { font-size: 27px; }
+      .cards { grid-template-columns: 1fr; gap: 25px; }
+      .demo-box { padding: 25px 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+  .billing { display:flex;justify-content:center;gap:8px;margin:-12px 0 35px;flex-wrap:wrap }.billing button { border:1px solid #c2b4e5;background:white;color:#6950a0;border-radius:24px;padding:9px 22px }.billing button[aria-pressed="true"] { background:linear-gradient(135deg,#667eea,#764ba2);color:white }.billing-note { text-align:center;color:#777;font-size:13px;margin:25px 0 0 }.faq { max-width:800px;margin:auto }.faq details { background:#f8f7ff;border:1px solid #e1dbee;border-radius:12px;margin:14px 0;padding:18px 22px }.faq summary { cursor:pointer;font-weight:bold;color:#6854a0 }.faq p { color:#777;margin-top:12px;font-size:14px }
+</style>
+</head>
+<body>
+  <header id="home">
+    <div class="container navigation">
+      <a class="logo" href="#home">🚀 FlowAI</a>
+      <nav aria-label="主导航">
+        <a href="#home">首页</a><a href="#features">功能</a><a href="#pricing">价格</a><a href="#about">关于</a><a class="nav-button" href="#demo">免费开始</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title">让 AI 释放你的无限潜能</h1>
+      <p>一站式智能创作平台，让工作更高效，让创意更简单。</p>
+      <div class="buttons"><a class="button button-white" href="#demo">免费开始 →</a><a class="button button-outline" href="#features">了解更多</a></div>
+    </section>
+    <div class="stats" aria-label="平台展示数据">
+      <div><span class="stat-number">10,000+</span><span class="stat-label">用户的信赖之选</span></div>
+      <div><span class="stat-number">50,000+</span><span class="stat-label">精彩内容已创作</span></div>
+      <div><span class="stat-number">99.9%</span><span class="stat-label">服务可用性</span></div>
+    </div>
+    <section id="features">
+      <div class="container">
+        <h2 class="section-title">强大的功能，无限的可能</h2>
+        <p class="section-subtitle">我们为您提供全方位的 AI 解决方案，助力您的每一次成功。</p>
+        <div class="cards">
+          <article class="card"><div class="feature-icon" aria-hidden="true">✍️</div><h3>AI 智能写作</h3><p>告别灵感枯竭，一键生成优质内容。无论是文章、邮件还是营销文案，都能轻松搞定。</p></article>
+          <article class="card"><div class="feature-icon" aria-hidden="true">📊</div><h3>数据分析</h3><p>让复杂的数据变得简单易懂。智能分析，精准洞察，帮助您做出更明智的决策。</p></article>
+          <article class="card"><div class="feature-icon" aria-hidden="true">🤝</div><h3>团队协作</h3><p>打破沟通壁垒，让团队协作更加高效。随时随地共享创意，携手创造无限可能。</p></article>
+        </div>
+      </div>
+    </section>
+    <section class="pricing" id="pricing">
+      <div class="container">
+        <h2 class="section-title">选择适合您的方案</h2>
+        <p class="section-subtitle">灵活的价格方案，满足不同阶段的需求。</p>
+        <div class="billing" aria-label="计费周期"><button type="button" data-billing="monthly" aria-pressed="true">按月付费</button><button type="button" data-billing="yearly" aria-pressed="false">按年付费 · 省 20%</button></div><div class="cards">
+          <article class="card price-card"><h3>免费版</h3><div class="price">¥0<span> / 月</span></div><ul><li>✓ 每月 10 次 AI 创作</li><li>✓ 基础写作功能</li><li>✓ 社区支持</li></ul><button class="button button-purple" data-plan="免费版" type="button">立即开始</button></article>
+          <article class="card price-card popular"><span class="popular-label">最受欢迎</span><h3>专业版</h3><div class="price"><b data-monthly="29" data-yearly="23">¥29</b><span> / 月</span></div><ul><li>✓ 每月 500 次 AI 创作</li><li>✓ 全部高级功能</li><li>✓ 优先客户支持</li></ul><button class="button button-purple" data-plan="专业版" type="button">选择专业版</button></article>
+          <article class="card price-card"><h3>团队版</h3><div class="price"><b data-monthly="99" data-yearly="79">¥99</b><span> / 月</span></div><ul><li>✓ 每月 2,000 次 AI 创作</li><li>✓ 5 人团队协作</li><li>✓ 专属客户支持</li></ul><button class="button button-purple" data-plan="团队版" type="button">选择团队版</button></article>
+        </div>
+      </div>
+    </section>
+    <section id="faq"><div class="container"><h2 class="section-title">常见问题，一次解答</h2><p class="section-subtitle">关于 FlowAI，您可能还想了解这些。</p><div class="faq"><details><summary>FlowAI 可以帮助我完成哪些工作？</summary><p>您可以用它整理想法、起草产品文案和总结团队讨论。这一演示页面展示了写作、分析和协作三种功能入口。</p></details><details><summary>免费版和专业版有什么区别？</summary><p>免费版包含每月 10 次创作，适合初次体验；专业版提供更多创作额度和高级功能。以上为虚构产品的示例方案。</p></details><details><summary>我的输入会被发送到服务器吗？</summary><p>此演示完全在浏览器中运行，输入仅用于组合本地示例文案。关闭或刷新页面后不会保存。</p></details></div></div></section>
+    <section id="demo">
+      <div class="container">
+        <h2 class="section-title">现在，开启您的 AI 之旅</h2>
+        <p class="section-subtitle" id="plan-message">输入一个想法，体验智能创作的魅力。</p>
+        <form class="demo-box" id="demo-form">
+          <label for="idea">您想创作什么？</label>
+          <textarea id="idea" name="idea" maxlength="300" required placeholder="例如：为我的咖啡店写一段开业宣传文案"></textarea>
+          <button class="button button-purple" type="button" data-local-submit>✨ 开始生成</button>
+          <p class="hint">本地演示：展示预设示例，不会发送您的输入，也不会实际订阅或扣费。</p>
+          <div class="result" id="result" role="status" hidden><h3>演示结果</h3><p id="result-text"></p></div>
+        </form>
+      </div>
+    </section>
+    <section class="cta" id="about">
+      <h2>准备好迎接效率革命了吗？</h2>
+      <p>FlowAI，您的智能创作伙伴。让科技赋能创意，让未来触手可及。</p>
+      <a class="button button-white" href="#demo">立即免费体验</a>
+    </section>
+  </main>
+  <footer><p>© 2023 FlowAI. All rights reserved.</p><p>FlowAI 为虚构演示产品，数据与价格仅用于页面展示。</p></footer>
+  <script>
+    document.querySelectorAll('[data-billing]').forEach(button => button.addEventListener('click', () => {
+      const yearly=button.dataset.billing==='yearly';
+      document.querySelectorAll('[data-billing]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+      document.querySelectorAll('[data-monthly]').forEach(price=>price.textContent='¥'+(yearly?price.dataset.yearly:price.dataset.monthly));
+      let note=document.getElementById('billing-note');
+      if(!note){note=document.createElement('p');note.id='billing-note';note.className='billing-note';note.setAttribute('role','status');document.querySelector('#pricing .container').append(note);}
+      note.textContent=yearly?'按年付费：专业版 ¥276 / 年，团队版 ¥948 / 年。价格为演示数据。':'按月付费：专业版 ¥29 / 月，团队版 ¥99 / 月。价格为演示数据。';
+    }));
+    const idea = document.querySelector('#idea');
+    document.querySelectorAll('[data-plan]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelector('#plan-message').textContent = '已选择' + button.dataset.plan + '演示。输入一个想法，立即体验。';
+        document.querySelector('#demo').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        idea.focus({ preventScroll: true });
+      });
+    });
+    const localForm = document.getElementById('demo-form');
+    function runLocalForm() {
+      if (!localForm.reportValidity()) return;
+      const prompt = idea.value.trim();
+      if (!prompt) { idea.setCustomValidity('请输入一个想法。'); idea.reportValidity(); return; }
+      idea.setCustomValidity('');
+      document.querySelector('#result-text').textContent = '您的创作主题：' + prompt + '\n\n让每一个想法，都拥有无限可能。用心发现生活中的美好，用行动开启全新体验。现在就迈出第一步，让精彩从这里开始！\n\n以上为预设演示文案，可继续修改输入并再次体验。';
+      document.querySelector('#result').hidden = false;
+    }
+    bindLocalForm(localForm, runLocalForm);
+    idea.addEventListener('input', () => idea.setCustomValidity(''));
+
+function bindLocalForm(form, action) {
+  form.querySelector('[data-local-submit]').addEventListener('click', action);
+  form.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.isComposing && event.target instanceof HTMLInputElement) {
+      event.preventDefault();
+      action();
+    }
+  });
+  form.addEventListener('submit', event => event.preventDefault());
+}
+</script>
+</body>
+</html>

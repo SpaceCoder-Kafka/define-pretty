@@ -1,8 +1,12 @@
 import type { FeatureBoard } from './feature-board';
 import type { ModelConfig, RunStatus, Usage } from './types';
+export interface BuiltinSourceInfo {
+  slug: string; description: string; style: 'classic' | 'neon'; order: number;
+}
 export interface FeatureTestSource {
   experimentId: string; title: string; versionId: string; versionNumber: number; runId: string;
   createdAt: string; hash: string; config: ModelConfig; requirements?: string;
+  builtin?: BuiltinSourceInfo;
 }
 export interface FeatureTest {
   id: string; boardId: string; boardRevision: number; board: FeatureBoard;

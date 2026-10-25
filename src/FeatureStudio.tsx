@@ -176,7 +176,7 @@ export default function FeatureStudio() {
   }
 
   return <div className="feature-app">
-    <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty <span className="feature-beta">视觉特征卡片</span></a><div className="feature-header-actions"><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
+    <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty <span className="feature-beta">视觉特征卡片</span></a><div className="feature-header-actions"><a className="feature-quiet" href="#original-websites"><FlaskConical size={15}/>原始网页</a><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
     <main className="feature-main">
       <section className="feature-intro"><div><div className="feature-eyebrow">从「喜欢这个」到「借鉴这一点」</div><h1>把喜欢的设计，选出来。</h1><p>选择喜欢的视觉效果，保留关键关系，按自己的内容适配，再交给 AI。</p></div><ol className="feature-steps"><li className={board ? 'done' : 'current'}><span>1</span>上传参考图</li><li className={board?.cards.length ? 'done' : board ? 'current' : ''}><span>2</span>发现与选择</li><li className={selected.length ? 'current' : ''}><span>3</span>导出参考</li></ol></section>
       {error && <div className="feature-alert" role="alert">{error}<button aria-label="关闭错误" onClick={() => setError('')}><X size={16}/></button></div>}

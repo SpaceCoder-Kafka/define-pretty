@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>蓝紫色的旧记忆 · Define Pretty</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #242527; background: #f5f5f3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #7161cc; outline-offset: 4px; }
+    a { color: inherit; }
+    .topbar { padding: 20px 4%; border-bottom: 1px solid #deded9; display: flex; justify-content: space-between; gap: 20px; font-size: 13px; }
+    .brand { text-decoration: none; font-weight: 650; letter-spacing: -.3px; }
+    .brand span { padding-left: 16px; margin-left: 16px; border-left: 1px solid #ccc; font-weight: 400; color: #71716b; }
+    .topbar > span { color: #71716b; }
+    main { width: min(1520px, 92%); margin: 0 auto; padding: 48px 0; }
+    .intro { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 32px; }
+    .eyebrow { font-size: 12px; color: #74746e; letter-spacing: 1.5px; margin: 0 0 14px; }
+    h1 { margin: 0 0 12px; font-size: clamp(26px, 3vw, 38px); font-weight: 600; letter-spacing: -1.5px; }
+    .intro p:last-child { margin: 0; color: #73736f; font-size: 14px; line-height: 1.8; }
+    .viewport-note { flex-shrink: 0; font-size: 12px; color: #74746e; padding-bottom: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px 24px; }
+    .card { min-width: 0; border: 1px solid #d8d8d2; border-radius: 10px; overflow: hidden; background: white; }
+    .card[data-picked="true"] { outline: 2px solid #7161cc; outline-offset: 3px; }
+    .card-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #e5e5df; }
+    .letter { width: 25px; height: 25px; display: grid; place-items: center; background: #eeeeea; border-radius: 5px; font: 600 13px ui-monospace, monospace; }
+    h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .picked { margin-left: auto; color: #6c57b2; font-size: 12px; display: none; }
+    [data-picked="true"] .picked { display: inline; }
+    .thumb { position: relative; aspect-ratio: 1440 / 1000; background: #eee; overflow: hidden; }
+    .thumb iframe { width: 1440px; height: 1000px; border: 0; transform-origin: top left; pointer-events: none; }
+    .preview-hit { position: absolute; inset: 0; border: 0; background: transparent; width: 100%; }
+    .preview-hit:hover { box-shadow: inset 0 0 0 2px #7775; }
+    .card-foot { padding: 17px 18px; border-top: 1px solid #e5e5df; }
+    .description { font-size: 13px; line-height: 1.7; color: #6c6c67; margin: 0 0 15px; }
+    .actions { display: flex; align-items: center; gap: 10px; }
+    .view, .pick, .tool { background: #fff; border: 1px solid #d7d7d0; border-radius: 5px; padding: 8px 12px; color: #454540; font-size: 12px; }
+    .view { background: #2d2f30; color: #fff; border-color: #2d2f30; }
+    .standalone { margin-left: auto; font-size: 12px; text-decoration: none; color: #74746e; }
+    .standalone:hover { text-decoration: underline; }
+    .note { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: #808079; font-size: 12px; margin-top: 27px; line-height: 1.8; }
+    .note p { margin: 0; }
+    #selection { color: #645595; }
+    dialog { width: calc(100vw - 32px); max-width: 1600px; height: calc(100dvh - 32px); max-height: none; padding: 0; border: 1px solid #d7d7d1; border-radius: 9px; background: #e4e4e0; }
+    dialog::backdrop { background: #202124b8; }
+    .dialog-body { height: 100%; display: flex; flex-direction: column; }
+    .dialog-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 16px; background: #fff; border-bottom: 1px solid #ddd; }
+    .dialog-title { font-size: 14px; margin-right: 8px; }
+    .toolbar-group { display: flex; align-items: center; gap: 8px; }
+    .tool[aria-pressed="true"] { background: #eeebf6; border-color: #b8acd4; }
+    #close { font-size: 18px; padding: 3px 10px; }
+    .stage { flex: 1; min-height: 0; padding: 14px; display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
+    .frame-shell { position: relative; flex-shrink: 0; background: white; box-shadow: 0 2px 16px #0002; }
+    #full-frame { position: absolute; top: 0; left: 0; border: 0; transform-origin: top left; }
+    .dialog-tip { margin: 0; padding: 0 16px 10px; text-align: center; color: #77766f; font-size: 11px; }
+    @media (max-width: 760px) { main { padding-top: 30px; } .grid { grid-template-columns: 1fr; } .intro { display: block; } .viewport-note { display: block; margin-top: 16px; } .topbar > span { display: none; } .dialog-toolbar { padding: 8px; } .dialog-title { font-size: 12px; } .tool { padding: 7px 9px; } .stage { padding: 7px; } dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); } }
+  </style>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/">Define Pretty <span>原网页候选</span></a><span>视觉复刻实验 / 01</span></header>
+  <main>
+    <div class="intro">
+      <div><p class="eyebrow">THE BLUE–PURPLE ERA</p><h1>你记忆里的「AI 味」，是哪一种？</h1><p>同一个 FlowAI，四种熟悉的模板感。选出最像早期 AI 生成网页的一版。</p></div>
+      <span class="viewport-note">统一首屏 · 1440 × 1000</span>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="note"><p>每版都包含功能、定价和可操作的演示表单。记为候选只保存在此浏览器中，不会更改默认原网页。</p><p id="selection" role="status" aria-live="polite">还没有记录候选</p></div>
+  </main>
+  <dialog id="preview" aria-labelledby="dialog-title">
+    <div class="dialog-body">
+      <div class="dialog-toolbar">
+        <div class="toolbar-group"><button class="tool" id="prev" aria-label="上一版">←</button><strong class="dialog-title" id="dialog-title"></strong><button class="tool" id="next" aria-label="下一版">→</button></div>
+        <div class="toolbar-group"><button class="tool" id="desktop" aria-pressed="true">桌面 1440</button><button class="tool" id="mobile" aria-pressed="false">手机 390</button><button class="tool" id="modal-pick">记为候选</button><button class="tool" id="close" aria-label="关闭预览">×</button></div>
+      </div>
+      <div class="stage" id="stage"><div class="frame-shell" id="frame-shell"><iframe id="full-frame" title="完整网页预览" sandbox="allow-scripts"></iframe></div></div>
+      <p class="dialog-tip">在网页内滚动查看完整内容 · 按 Esc 返回对比</p>
+    </div>
+  </dialog>
+  <script>
+    const variants = [
+      { id: 'A', name: '经典整块渐变', file: 'a-classic.html', description: '白色导航、大面积蓝紫 Banner、居中口号，接三张 Emoji 白卡片。' },
+      { id: 'B', name: '白底通用模板', file: 'b-white.html', description: '渐变标题、胶囊按钮、浅紫分区和厚阴影：熟悉的默认落地页。' },
+      { id: 'C', name: '深色霓虹科技', file: 'c-neon.html', description: '深蓝底、紫色光晕、发光描边和渐变大字，科技感全部拉满。' },
+      { id: 'D', name: '满屏玻璃拟态', file: 'd-glass.html', description: '渐变铺满整页，导航、内容、卡片层层半透明，哪里都要玻璃。' }
+    ];
+    const grid = document.getElementById('grid');
+    const preview = document.getElementById('preview');
+    const frame = document.getElementById('full-frame');
+    let selected = null;
+    let current = 0;
+    let mobile = false;
+    try { const stored = localStorage.getItem('define-pretty:ai-baseline-candidate'); if (variants.some(v => v.id === stored)) selected = stored; } catch {}
+    grid.innerHTML = variants.map((v, index) => `<article class="card" data-id="${v.id}"><div class="card-head"><span class="letter">${v.id}</span><h2>${v.name}</h2><span class="picked">已记为候选</span></div><div class="thumb"><iframe src="${v.file}" title="${v.id} 版首屏" sandbox="" tabindex="-1" aria-hidden="true"></iframe><button class="preview-hit" data-open="${index}" aria-label="打开 ${v.id} 版：${v.name}"></button></div><div class="card-foot"><p class="description">${v.description}</p><div class="actions"><button class="view" data-open="${index}">查看完整网页 ↗</button><button class="pick" data-pick="${v.id}">记为候选</button><a class="standalone" href="${v.file}" target="_blank" rel="noopener">独立打开</a></div></div></article>`).join('');
+    const thumbObserver = new ResizeObserver(entries => entries.forEach(({ target, contentRect }) => { target.querySelector('iframe').style.transform = `scale(${contentRect.width / 1440})`; }));
+    document.querySelectorAll('.thumb').forEach(el => thumbObserver.observe(el));
+    function updateSelection(persist) {
+      document.querySelectorAll('.card').forEach(card => { card.dataset.picked = String(card.dataset.id === selected); });
+      document.querySelectorAll('[data-pick]').forEach(button => { const active = button.dataset.pick === selected; button.textContent = active ? '已记为候选 ✓' : '记为候选'; button.setAttribute('aria-pressed', String(active)); });
+      document.getElementById('selection').textContent = selected ? `当前候选：${selected} · ${variants.find(v => v.id === selected).name}` : '还没有记录候选';
+      document.getElementById('modal-pick').textContent = selected === variants[current].id ? '已记为候选 ✓' : '记为候选';
+      if (persist) { try { localStorage.setItem('define-pretty:ai-baseline-candidate', selected); } catch { document.getElementById('selection').textContent += '（仅在本次页面保留）'; } }
+    }
+    function fitFrame() {
+      if (!preview.open) return;
+      const stage = document.getElementById('stage');
+      const padding = parseFloat(getComputedStyle(stage).paddingLeft) * 2;
+      const width = mobile ? 390 : 1440;
+      const height = mobile ? 844 : 1000;
+      const scale = Math.min((stage.clientWidth - padding) / width, (stage.clientHeight - padding) / height, 1);
+      const shell = document.getElementById('frame-shell');
+      shell.style.width = `${width * scale}px`; shell.style.height = `${height * scale}px`;
+      frame.style.width = `${width}px`; frame.style.height = `${height}px`; frame.style.transform = `scale(${scale})`;
+    }
+    function openVariant(index) {
+      current = (index + variants.length) % variants.length;
+      const variant = variants[current];
+      document.getElementById('dialog-title').textContent = `${variant.id} · ${variant.name}`;
+      frame.title = `${variant.id} 版 ${variant.name} 完整预览`;
+      frame.src = variant.file;
+      if (!preview.open) { preview.showModal(); document.body.style.overflow = 'hidden'; }
+      updateSelection(false); fitFrame();
+    }
+    grid.addEventListener('click', event => { const open = event.target.closest('[data-open]'); const pick = event.target.closest('[data-pick]'); if (open) openVariant(Number(open.dataset.open)); if (pick) { selected = pick.dataset.pick; updateSelection(true); } });
+    document.getElementById('prev').onclick = () => openVariant(current - 1);
+    document.getElementById('next').onclick = () => openVariant(current + 1);
+    document.getElementById('close').onclick = () => preview.close();
+    preview.addEventListener('close', () => { document.body.style.overflow = ''; frame.removeAttribute('src'); });
+    document.getElementById('modal-pick').onclick = () => { selected = variants[current].id; updateSelection(true); };
+    function setDevice(value) { mobile = value; document.getElementById('desktop').setAttribute('aria-pressed', String(!value)); document.getElementById('mobile').setAttribute('aria-pressed', String(value)); fitFrame(); }
+    document.getElementById('desktop').onclick = () => setDevice(false);
+    document.getElementById('mobile').onclick = () => setDevice(true);
+    new ResizeObserver(fitFrame).observe(document.getElementById('stage'));
+    updateSelection(false);
+  </script>
+</body>
+</html>

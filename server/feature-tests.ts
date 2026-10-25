@@ -10,6 +10,7 @@ import { executeCodex, hashWebsite, type Executor } from './codex.ts';
 import { chromeExecutable, inspectWebsite } from './validation.ts';
 import { detectImageType, requireSafeId, safeFilePath } from './security.ts';
 import { fail, text } from './input.ts';
+import { builtinWebsiteRoot, freezeBuiltinSources } from './builtin-sources.ts';
 
 const activeStatus = (status: string) => ['queued','running','checking'].includes(status);
 export type TestChecker = (url: string, signal: AbortSignal) => Promise<void>;
@@ -50,10 +51,11 @@ export class FeatureTests {
   readonly root: string;
   private source?: FeatureTestSource;
   private sourcePromise?: Promise<FeatureTestSource>;
+  private builtinsPromise?: Promise<FeatureTestSource[]>;
   private active?: { id: string; controller: AbortController; promise: Promise<void>; reason?: 'cancelled' | 'interrupted' | 'timeout' };
   private preparing?: Promise<void>;
   private stopped = false;
-  constructor(private boards: FeatureBoards, private mainRoot: string, private previewOrigin: string, private executor: Executor = executeCodex, private checker: TestChecker = checkFeatureTest, private timeoutMs = 1_800_000) {
+  constructor(private boards: FeatureBoards, private mainRoot: string, private previewOrigin: string, private executor: Executor = executeCodex, private checker: TestChecker = checkFeatureTest, private timeoutMs = 1_800_000, private builtinRoot = builtinWebsiteRoot) {
     this.root = path.join(path.dirname(boards.root), 'feature-tests');
   }
   directory(id: string) { return path.join(this.root, 'runs', requireSafeId(id)); }
@@ -71,6 +73,7 @@ export class FeatureTests {
   async initialize() {
     await mkdir(path.join(this.root,'runs'), { recursive: true });
     await mkdir(path.join(this.root,'source-runs'), { recursive: true });
+    await this.builtinSources();
     for(const run of await this.listSourceRuns()) {
       if(activeStatus(run.status)) await this.persistSourceRun({ ...run, status:'interrupted', error:'服务重启，原网页生成已中断。', finishedAt:new Date().toISOString() });
       else if(run.status==='completed' && run.source) await this.saveSourceMetadata(run.source);
@@ -82,15 +85,22 @@ export class FeatureTests {
     if(!this.sourcePromise) this.sourcePromise=this.importSource().then(source=>{ this.source=source; return source; }).finally(()=>{this.sourcePromise=undefined;});
     return structuredClone(await this.sourcePromise);
   }
+  private builtinSources(): Promise<FeatureTestSource[]> {
+    if (!this.builtinsPromise) this.builtinsPromise = freezeBuiltinSources(path.join(this.root, 'sources'), this.builtinRoot).catch(error => { this.builtinsPromise = undefined; throw error; });
+    return this.builtinsPromise;
+  }
   private async importSource(): Promise<FeatureTestSource> {
     try { return JSON.parse(await readFile(path.join(this.root,'source.json'),'utf8')); }
     catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT') throw error; }
     // Read the main store without initializing it: recovery must never alter main-branch runs.
-    const data = JSON.parse(await readFile(path.join(this.mainRoot,'store.json'),'utf8')) as { experiments: { id: string; title: string; createdAt: string; versions: { id: string; number: number; baselineRunId?: string; config: ModelConfig }[] }[]; runs: { id: string; groupId: string; status: string; artifactHash?: string; createdAt: string }[] };
-    const experiment = [...data.experiments].sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];
+    type LegacyData = { experiments: { id: string; title: string; createdAt: string; versions: { id: string; number: number; baselineRunId?: string; config: ModelConfig }[] }[]; runs: { id: string; groupId: string; status: string; artifactHash?: string; createdAt: string }[] };
+    let data: LegacyData;
+    try { data = JSON.parse(await readFile(path.join(this.mainRoot,'store.json'),'utf8')); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return (await this.builtinSources())[0]; throw error; }
+    const experiment = [...(data.experiments ?? [])].sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];
     const version = experiment?.versions.toSorted((a,b)=>b.number-a.number)[0];
-    const baseline = data.runs.find(r=>r.id===version?.baselineRunId);
-    if(!experiment || !version || !baseline || baseline.groupId!=='baseline' || baseline.status!=='completed' || !baseline.artifactHash) fail('尚未导入可用的验证原网页。',409);
+    const baseline = (data.runs ?? []).find(r=>r.id===version?.baselineRunId);
+    if(!experiment || !version || !baseline || baseline.groupId!=='baseline' || baseline.status!=='completed' || !baseline.artifactHash) return (await this.builtinSources())[0];
     const sourceDir=path.join(this.mainRoot,'runs',requireSafeId(baseline.id),'website');
     await safeFilePath(sourceDir,'index.html');
     if(await hashWebsite(sourceDir)!==baseline.artifactHash) fail('历史原始网页的哈希已变化，不能作为验证基线。',409);
@@ -128,23 +138,29 @@ export class FeatureTests {
   }
   async getSourceById(id: string): Promise<FeatureTestSource> {
     requireSafeId(id);
-    try { return JSON.parse(await readFile(path.join(path.dirname(this.sourceDirectory(id)),'source.json'),'utf8')); }
+    try {
+      const source: FeatureTestSource = JSON.parse(await readFile(await safeFilePath(path.dirname(this.sourceDirectory(id)), 'source.json'), 'utf8'));
+      if (source.runId !== id || (source.builtin && id !== `builtin-${source.builtin.slug}-${source.hash}`)) fail('原网页的来源记录已改变。',409);
+      return source;
+    }
     catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error; }
     const current=await this.getSource();
     if(current.runId!==id) fail('原始网页不存在。',404);
     await this.saveSourceMetadata(current); return current;
   }
   async listSources(): Promise<FeatureTestSource[]> {
+    const builtins = await this.builtinSources();
     // Preserve the original imported baseline when the first custom page is created.
     try { await this.saveSourceMetadata(await this.getSource()); }
     catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT' && (error as {status?:number}).status!==409)throw error; }
     await mkdir(path.join(this.root,'sources'),{recursive:true});
     const entries=await readdir(path.join(this.root,'sources'),{withFileTypes:true});
-    const sources=await Promise.all(entries.filter(e=>e.isDirectory()).map(async e=>{
+    const sources=await Promise.all(entries.filter(e=>e.isDirectory() && !e.name.startsWith('.')).map(async e=>{
       try{return JSON.parse(await readFile(path.join(this.root,'sources',e.name,'source.json'),'utf8')) as FeatureTestSource;}
       catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}
     }));
-    return sources.filter((s):s is FeatureTestSource=>!!s).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    const custom = sources.filter((s):s is FeatureTestSource=>!!s && !s.builtin).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    return structuredClone([...builtins, ...custom]);
   }
   async generateSource(requirements: string, config: ModelConfig): Promise<FeatureSourceRun> {
     requirements=text(requirements,'网页需求',12000).trim();
@@ -200,6 +216,7 @@ export class FeatureTests {
       if(board.status==='running' || !selectedFeatures(board).length) fail('请先完成并勾选要验证的卡片。');
       if(detectImageType(image)?.mimeType!=='image/png') fail('测试需要导出的 PNG 卡片图片。');
       const source=sourceId ? await this.getSourceById(sourceId) : await this.getSource();
+      await safeFilePath(this.sourceDirectory(source.runId),'index.html');
       if(await hashWebsite(this.sourceDirectory(source.runId))!==source.hash) fail('冻结的验证基线已改变。',409);
       const id=randomUUID(), dir=this.directory(id); await mkdir(this.workDirectory(id),{recursive:true});
       await cp(this.sourceDirectory(source.runId),this.websiteDirectory(id),{recursive:true});
