@@ -66,3 +66,78 @@ test('a preparation interrupted before record publication does not break history
     await f.tests.initialize();assert.deepEqual(await f.tests.list(),[]);
   }finally{await f.cleanup();}
 });
+
+test('custom sources receive only requirements, remain immutable and keep historical comparisons addressable',async()=>{
+  const seen:string[]=[];
+  const f=await fixture(async options=>{
+    const file=path.join(options.cwd,'website/index.html');
+    if(!options.referenceFile){assert(!options.prompt.includes('已选特征'));assert(!options.prompt.includes('项目管理'));await writeFile(file,'<h1>我的博客</h1>');}
+    else {seen.push(await readFile(file,'utf8'));assert(!options.prompt.includes('项目管理'));await writeFile(file,'<h1>优化后的博客</h1>');}
+    return {exitCode:0,summary:'done',usage:{input_tokens:1,output_tokens:2}};
+  });
+  try {
+    const old=await f.tests.getSource();
+    const generated=await f.tests.generateSource('中文个人博客，包含文章和作者介绍',config);
+    await done(async()=>(await f.tests.listSources()).some(s=>s.runId===generated.id));
+    const source=await f.tests.getSourceById(generated.id);assert.equal(source.requirements,generated.requirements);
+    const job=await f.tests.getSourceRun(generated.id);assert.equal(job.status,'completed');assert(job.usage);assert.equal(source.hash,await hashWebsite(f.tests.sourceDirectory(generated.id)));
+    assert.equal((await f.tests.getSourceById(old.runId)).hash,old.hash);
+    for(let i=0;i<2;i++){
+      const run=await f.tests.start(f.board.id,f.board.revision,png,config,generated.id);
+      await done(async()=>(await f.tests.get(run.id)).status==='completed');
+      assert.equal((await f.tests.get(run.id)).source.runId,generated.id);
+    }
+    assert.deepEqual(seen,['<h1>我的博客</h1>','<h1>我的博客</h1>']);
+    assert.equal(await hashWebsite(f.tests.sourceDirectory(generated.id)),source.hash);
+    assert.equal(await hashWebsite(f.html),old.hash);
+    const restarted=new FeatureTests(f.boards,f.main,'http://localhost:4194');await restarted.initialize();
+    assert.equal((await restarted.listSources()).length,2);
+    assert.equal((await restarted.getSourceById(generated.id)).hash,source.hash);
+  }finally{await f.cleanup();}
+});
+
+test('custom source generation works without any legacy experiment and rejects empty requirements',async()=>{
+  let calls=0;
+  const f=await fixture(async options=>{calls++;await writeFile(path.join(options.cwd,'website/index.html'),'<h1>个人简历</h1>');return {exitCode:0};});
+  try{
+    await rm(f.main,{recursive:true,force:true});assert.deepEqual(await f.tests.listSources(),[]);
+    await assert.rejects(f.tests.generateSource('  ',config),{status:400});assert.equal(calls,0);
+    const job=await f.tests.generateSource('个人简历页',config);
+    await done(async()=>(await f.tests.listSources()).length===1);
+    assert.equal((await f.tests.getSourceById(job.id)).requirements,'个人简历页');
+    await assert.rejects(f.tests.getSourceById('../escape'));
+  }finally{await f.cleanup();}
+});
+
+test('source cancellation, timeout, shutdown and restart preserve the old source and failed records',async()=>{
+  const executor:Executor=async options=>new Promise(resolve=>options.signal.addEventListener('abort',()=>resolve({exitCode:null}),{once:true}));
+  const f=await fixture(executor,60);
+  try{
+    const old=await f.tests.getSource();
+    const cancelled=await f.tests.generateSource('博客',config);
+    await assert.rejects(f.tests.generateSource('简历',config),{status:409});
+    await assert.rejects(f.tests.start(f.board.id,f.board.revision,png,config),{status:409});
+    assert.equal((await f.tests.cancelSource(cancelled.id)).status,'cancelled');
+    const timed=await f.tests.generateSource('简历',config);await done(async()=>(await f.tests.getSourceRun(timed.id)).status==='failed');
+    assert.match((await f.tests.getSourceRun(timed.id)).error!,/30 分钟/);
+    const interrupted=await f.tests.generateSource('作品集',config);await f.tests.shutdown();
+    assert.equal((await f.tests.getSourceRun(interrupted.id)).status,'interrupted');
+    assert.equal((await f.tests.getSource()).runId,old.runId);assert.equal((await f.tests.listSources()).length,1);
+    await writeFile(path.join(f.tests.sourceRunDirectory(timed.id),'run.json'),JSON.stringify({...timed,status:'checking'}));
+    const restarted=new FeatureTests(f.boards,f.main,'http://localhost:4194');await restarted.initialize();
+    assert.equal((await restarted.getSourceRun(timed.id)).status,'interrupted');
+    assert.equal((await restarted.listSources()).length,1);
+  }finally{await f.cleanup();}
+});
+
+test('a source failing browser checks is kept as a failed job, never published for testing',async()=>{
+  const f=await fixture();
+  const tests=new FeatureTests(f.boards,f.main,'http://localhost:4194',async options=>{await writeFile(path.join(options.cwd,'website/index.html'),'<h1>broken</h1>');return {exitCode:0};},async()=>{throw Error('resource failed');});
+  try{
+    await tests.initialize();const original=await tests.getSource();
+    const job=await tests.generateSource('博客',config);await done(async()=>(await tests.getSourceRun(job.id)).status==='failed');
+    assert.match((await tests.getSourceRun(job.id)).error!,/resource failed/);
+    assert.deepEqual((await tests.listSources()).map(s=>s.runId),[original.runId]);
+    await assert.rejects(tests.getSourceById(job.id),{status:404});
+  }finally{await tests.shutdown();await f.cleanup();}
+});

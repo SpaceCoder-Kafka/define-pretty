@@ -54,7 +54,7 @@ test('real generation contract snapshots input and keeps old cards when starting
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
     const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 1); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
-    assert.equal(input.cardFormat, 4); assert.equal(input.guidanceVersion, 6);
+    assert.equal(input.cardFormat, 5); assert.equal(input.guidanceVersion, 7);
     assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
     await assert.rejects(f.boards.generate(board.id), { status: 409 });
     const next = await f.boards.create(board.reference.id, config, board.title); assert.notEqual(next.id, board.id); assert.equal((await f.boards.get(board.id)).cards.length, 1);
@@ -169,4 +169,48 @@ test('generation missing global style fails without accepting a misleading parti
     assert.match(board.error!, /整体视觉风格/);
     assert.deepEqual(board.cards, []);
   } finally { await f.cleanup(); }
+});
+
+test('detail discovery snapshots existing cards, preserves choices, and excludes new details until selected',async()=>{
+  let prompt='';
+  const f=await fixture(async options=>{prompt=options.prompt;assert.equal(options.readOnly,true);const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));assert.equal(schema.properties.cards.minItems,0);return {exitCode:0,summary:JSON.stringify({cards:[{...generated,kind:'local',title:'用错位小标签点缀辅助说明',instruction:'DETAIL-ONLY-RULE'}]})};});
+  try{
+    const core=cardsInput([generated],true);core[0].selected=true;core[0].application='顶部操作';
+    const parent=await f.boards.edit(f.board.id,{revision:f.board.revision,title:'关键关系',cards:core});
+    const next=await f.boards.generate(parent.id,{revision:parent.revision,config});
+    assert.notEqual(next.id,parent.id);assert.equal(next.parentBoardId,parent.id);
+    await waitFor(async()=>(await f.boards.get(next.id)).status==='completed');
+    const result=await f.boards.get(next.id);assert.deepEqual(result.cards[0],parent.cards[0]);assert.deepEqual(await f.boards.get(parent.id),parent);
+    assert.equal(result.cards[1].discovery,'detail');assert.equal(result.cards[1].selected,false);assert.equal(result.addedDetails,1);
+    assert(prompt.includes(parent.cards[0].instruction));assert(!featureInstruction(result).includes('DETAIL-ONLY-RULE'));
+    const input=JSON.parse(await readFile(path.join(f.boards.directory(next.id),'input.json'),'utf8'));assert.equal(input.prompt,prompt);assert.deepEqual(input.existingCards,parent.cards);
+    result.cards[1].selected=true;
+    const saved=await f.boards.edit(result.id,{revision:result.revision,title:result.title,cards:result.cards});
+    assert(featureInstruction(saved).includes('DETAIL-ONLY-RULE'));assert.equal(saved.cards[1].discovery,'detail');
+    await assert.rejects(f.boards.generate(parent.id,{revision:1,config}),{status:409});
+  }finally{await f.cleanup();}
+});
+
+test('detail discovery accepts no additions and removes exact title duplicates',async()=>{
+  let output:any[]=[];const f=await fixture(async()=>({exitCode:0,summary:JSON.stringify({cards:output})}));
+  try{
+    const parent=await f.boards.edit(f.board.id,{revision:f.board.revision,title:'关键关系',cards:cardsInput([generated],true)});
+    for(const cards of [[],[{...generated,kind:'local'}]]){
+      output=cards;const next=await f.boards.generate(parent.id,{revision:parent.revision,config});
+      await waitFor(async()=>(await f.boards.get(next.id)).status==='completed');
+      const result=await f.boards.get(next.id);assert.deepEqual(result.cards,parent.cards);assert.equal(result.addedDetails,0);
+    }
+  }finally{await f.cleanup();}
+});
+
+test('invalid or cancelled detail discovery never replaces the copied cards or parent',async()=>{
+  const f=await fixture(async()=>({exitCode:0,summary:JSON.stringify({cards:[{...generated,kind:'global'}]})}));
+  try{
+    const parent=await f.boards.edit(f.board.id,{revision:f.board.revision,title:'关键关系',cards:cardsInput([generated],true)});
+    const next=await f.boards.generate(parent.id,{revision:parent.revision,config});await waitFor(async()=>(await f.boards.get(next.id)).status==='failed');
+    assert.deepEqual((await f.boards.get(next.id)).cards,parent.cards);assert.deepEqual(await f.boards.get(parent.id),parent);
+    const slow=new FeatureBoards(f.store,options=>new Promise(resolve=>options.signal.addEventListener('abort',()=>resolve({exitCode:null}),{once:true})));
+    await slow.initialize();const pending=await slow.generate(parent.id,{revision:parent.revision,config});
+    const cancelled=await slow.cancel(pending.id);assert.equal(cancelled.status,'cancelled');assert.deepEqual(cancelled.cards,parent.cards);await slow.shutdown();
+  }finally{await f.cleanup();}
 });

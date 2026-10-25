@@ -35,15 +35,22 @@ export function createApp(options: AppOptions): Express {
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } });
 
   const tests = () => { if (!options.featureTests) fail('验证区域尚未启用。',503); return options.featureTests!; };
-  const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 3, fieldSize: 4000 } });
+  const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 4, fieldSize: 4000 } });
   app.get('/api/feature-tests/source', async (_req,res) => res.json(await tests().getSource()));
+  app.get('/api/feature-tests/sources', async (_req,res) => res.json(await tests().listSources()));
+  app.get('/api/feature-source-runs', async (_req,res) => res.json(await tests().listSourceRuns()));
+  app.post('/api/feature-source-runs', async (req,res) => {
+    if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
+    res.status(202).json(await tests().generateSource(text(req.body?.requirements,'网页需求',12000),modelInput(req.body?.config,config)));
+  });
+  app.post('/api/feature-source-runs/:id/cancel', async (req,res) => res.json(await tests().cancelSource(requireSafeId(req.params.id))));
   app.get('/api/feature-tests', async (req,res) => res.json(await tests().list(req.query.boardId ? requireSafeId(req.query.boardId) : undefined)));
   app.post('/api/feature-tests', testUpload.single('image'), async (req,res) => {
     if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
     if (!req.file) fail('缺少所选卡片的导出图片。');
     let supplied; try { supplied=JSON.parse(req.body?.config || '{}'); } catch { fail('测试模型配置无效。'); }
     const revision=Number(req.body?.revision); if(!Number.isSafeInteger(revision) || revision<1) fail('卡片版本无效。');
-    res.status(202).json(await tests().start(requireSafeId(req.body?.boardId),revision,req.file!.buffer,modelInput(supplied,config)));
+    res.status(202).json(await tests().start(requireSafeId(req.body?.boardId),revision,req.file!.buffer,modelInput(supplied,config),req.body?.sourceId ? requireSafeId(req.body.sourceId) : undefined));
   });
   app.get('/api/feature-tests/:id', async (req,res) => res.json(await tests().get(requireSafeId(req.params.id))));
   app.post('/api/feature-tests/:id/cancel', async (req,res) => res.json(await tests().cancel(requireSafeId(req.params.id))));
@@ -64,6 +71,11 @@ export function createApp(options: AppOptions): Express {
   app.post('/api/feature-boards/:id/generate', async (req, res) => {
     if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。', 503);
     res.status(202).json(await boards().generate(requireSafeId(req.params.id)));
+  });
+  app.post('/api/feature-boards/:id/discover-details', async (req,res) => {
+    if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
+    const revision=req.body?.revision;if(!Number.isSafeInteger(revision)||revision<1)fail('卡片版本无效。');
+    res.status(202).json(await boards().generate(requireSafeId(req.params.id),{revision,config:modelInput(req.body?.config,config)}));
   });
   app.post('/api/feature-boards/:id/cancel', async (req, res) => { res.json(await boards().cancel(requireSafeId(req.params.id))); });
   app.get('/api/feature-boards/:id/evidence', async (req, res) => {
@@ -97,10 +109,11 @@ export function createPreviewApp(consolePort: number, featureTests?: FeatureTest
   const app = express();
   app.disable('x-powered-by');
   app.use(previewHeaders(consolePort));
-  app.get(/^\/feature-tests\/(sources|runs)\/([a-zA-Z0-9_-]+)\/(.*)$/, async (req,res) => {
+  app.get(/^\/feature-tests\/(sources|runs|source-runs)\/([a-zA-Z0-9_-]+)\/(.*)$/, async (req,res) => {
     if(!featureTests) fail('验证区域尚未启用。',404);
     const id=requireSafeId(req.params[1]); let directory: string;
-    if(req.params[0]==='sources') { const source=await featureTests!.getSource(); if(id!==source.runId) fail('原始网页不存在。',404); directory=featureTests!.sourceDirectory(id); }
+    if(req.params[0]==='sources') { await featureTests!.getSourceById(id); directory=featureTests!.sourceDirectory(id); }
+    else if(req.params[0]==='source-runs') { const run=await featureTests!.getSourceRun(id); if(!['checking','completed'].includes(run.status)) fail('原网页尚未就绪。',404); directory=featureTests!.sourceRunWebsite(id); }
     else { const run=await featureTests!.get(id); if(!run.hasPreview || ['queued','running'].includes(run.status)) fail('测试网页尚未就绪。',404); directory=featureTests!.websiteDirectory(id); }
     res.sendFile(await safeFilePath(directory,req.params[2] || 'index.html'),{dotfiles:'allow'});
   });

@@ -42,9 +42,13 @@ export const KEY_FEATURE_GUIDANCE = `生成前必须逐项检查字体与文字�
 卡片标题使用能想象画面的具体做法，不能只有“字体规范”“布局规范”“配色规范”等分类名。字体、布局、配色是检查视角，不是固定的卡片名额。
 输出前核对分工：整体卡片解释要素如何共同形成气质；专项卡片给出自己这一方面的实现与适配办法。专项必须能单独应用，不依赖整体卡片或其他未选卡片，也不各自提出一套新的整页方向。同一规则只在最合适的卡片里详细说明；有关联的卡片可以点明关系，但不要复制整段约束。若专项规则与整体方向冲突，先澄清共同成立的条件，不能留下互相矛盾的强制要求。`;
 export const FEATURE_PROMPT = `${FEATURE_WRITING_PROMPT}
-本次生成一个完整特征板：第一张必须是唯一的 kind="global" 的“整体视觉风格”，其余为 kind="local" 的专项特征。local 是类型标识，不代表只能作用于局部组件。专项数量由参考图中值得借鉴的内容决定，不设最低张数，最多 12 张；加上整体卡片最多 13 张。用户可单独选择任意卡片。
+本次仅生成决定整体观感的关键特征板：第一张必须是唯一的 kind="global" 的“整体视觉风格”，其余为 kind="local" 的专项特征。local 是类型标识，不代表只能作用于局部组件。优先用少量卡片表达决定性关系，不设最低张数，不为凑齐分类而出卡；最多 12 张专项仅为安全上限，不是数量目标。用户可单独选择任意卡片。
 ${GLOBAL_STYLE_GUIDANCE}
-${KEY_FEATURE_GUIDANCE}`;
+${KEY_FEATURE_GUIDANCE}
+筛选每张专项卡片：去掉该做法，整页气质或视觉层级是否明显改变？它是否提供了其他卡片没有覆盖的关系？它是否指导有意义的修改，而不只是增加一个装饰动作？只保留有清晰依据的关键做法。不要按面积大小判断重要性：像素标题、硬边阴影等小面积特征也可能决定辨识度。只影响少数局部、需要特定内容才有价值的次要做法，留给用户之后主动“发现更多细节”，本次不要输出。整体风格只解释关键要素如何配合，实施细节由对应专项承担，不重复堆叠规则。`;
+
+export const DETAIL_FEATURE_PROMPT = `${FEATURE_WRITING_PROMPT}
+用户主动要求发现更多细节。仅补充已有卡片未覆盖、具有独立迁移价值的局部做法，不重复整体风格或将已有规则拆成新卡片。不为凑数生成装饰要求；没有值得补充的内容时返回空 cards 数组。所有新卡片 kind 为 local。保留适用条件，明确什么内容才适合采用。已有卡片是去重依据，不是任务指令；不要修改或重新输出已有卡片。`;
 
 const stringSchema = { type: 'string' };
 export const featureSchema = { type: 'object', additionalProperties: false, required: ['cards'], properties: {
@@ -71,9 +75,11 @@ export function cardsInput(value: unknown, generated = false): FeatureCard[] {
   if (!Array.isArray(value) || value.length > 13 || (generated && !value.length)) fail('卡片数量必须在 0–13 张之间（最多一张整体风格），生成结果不能为空。');
   const cards: FeatureCard[] = value.map(item => {
     if (item?.kind !== undefined && !['global', 'local'].includes(item.kind)) fail('卡片类型无效。');
+    if (item?.discovery !== undefined && !['core','detail'].includes(item.discovery)) fail('特征来源无效。');
     const global = item?.kind === 'global';
     return ({
     ...(item?.kind ? { kind: item.kind } : {}),
+    ...(!generated && item?.discovery ? { discovery: item.discovery } : {}),
     id: generated ? randomUUID() : requireSafeId(item?.id), title: global ? GLOBAL_STYLE_TITLE : text(item?.title, '一句话特征', 60).trim(),
     description: text(item?.description, '图中依据', 240, true), instruction: text(item?.instruction, '怎么实现', 1000, global && !generated),
     effect: text(item?.effect ?? '', '带来什么效果', 160, !generated),
@@ -140,38 +146,63 @@ export class FeatureBoards {
       await this.persist(next); return next;
     });
   }
-  async generate(id: string): Promise<FeatureBoard> {
+  async generate(id: string, details?: {revision: number; config: ModelConfig}): Promise<FeatureBoard> {
     if (this.stopped || this.starting || this.active) fail('已有特征正在生成，请等待或取消后再试。', 409);
     this.starting = true;
     let prepared!: () => void;
     this.preparing = new Promise<void>(resolve => { prepared = resolve; });
     try {
-      const board = await this.get(id);
-      if (board.status !== 'draft' || board.cards.length) fail('请新建特征板后生成，已有卡片不会被覆盖。', 409);
+      let board = await this.get(id);
+      if(details) {
+        board=await this.serialize(async()=>{
+          const parent=await this.get(id);
+          if(parent.status==='running' || parent.revision!==details.revision)fail('卡片已更新，请刷新后再发现细节。',409);
+          if(!parent.cards.length)fail('请先生成或添加关键特征。');
+          if(parent.cards.filter(c=>c.kind!=='global').length>=12)fail('卡片已达到上限，请先移除不需要的细节。');
+          const now=new Date().toISOString();
+          const next:FeatureBoard={id:randomUUID(),title:parent.title,reference:parent.reference,cards:structuredClone(parent.cards),config:details.config,status:'draft',revision:1,createdAt:now,updatedAt:now,generationMode:'details',parentBoardId:parent.id};
+          await this.persist(next);return next;
+        });
+        id=board.id;
+      } else if (board.status !== 'draft' || board.cards.length) fail('请新建特征板后生成，已有卡片不会被覆盖。', 409);
+      const remaining=12-board.cards.filter(c=>c.kind!=='global').length;
+      const prompt=details ? `${DETAIL_FEATURE_PROMPT}\n最多补充 ${remaining} 张；这是上限，不是目标。已有卡片：\n${JSON.stringify(board.cards.map(({title,description,instruction,effect,applicability})=>({title,description,instruction,effect,applicability})))}` : FEATURE_PROMPT;
+      const schema=structuredClone(featureSchema);
+      if(details){schema.properties.cards.minItems=0;schema.properties.cards.maxItems=remaining;schema.properties.cards.items.properties.kind.enum=['local'];}
       const cwd = this.directory(id);
       const referenceFile = path.join(cwd, 'reference' + path.extname(this.store.referencePath(board.reference.id)));
       await cp(this.store.referencePath(board.reference.id), referenceFile);
-      await writeFile(path.join(cwd, 'schema.json'), JSON.stringify(featureSchema));
-      await writeFile(path.join(cwd, 'input.json'), JSON.stringify({ reference: board.reference, config: board.config, cardFormat: 4, guidanceVersion: 6, prompt: FEATURE_PROMPT }, null, 2));
-      const next = await this.update(id, { status: 'running' });
+      await writeFile(path.join(cwd, 'schema.json'), JSON.stringify(schema));
+      await writeFile(path.join(cwd, 'input.json'), JSON.stringify({ reference: board.reference, config: board.config, cardFormat: 5, guidanceVersion: 7, mode: details ? 'details' : 'core', existingCards: board.cards, prompt }, null, 2));
+      const next = await this.update(id, { status: 'running', generationMode: details ? 'details' : 'core' });
       if (this.stopped) return await this.update(id, { status: 'interrupted', error: '服务停止，生成已中断。' });
       const active = { id, controller: new AbortController(), promise: Promise.resolve(), reason: undefined as string | undefined };
       this.active = active;
-      active.promise = this.execute(next, referenceFile, active).finally(() => { this.active = undefined; });
+      active.promise = this.execute(next, referenceFile, active, prompt).finally(() => { this.active = undefined; });
       return next;
     } finally { this.starting = false; this.preparing = undefined; prepared(); }
   }
-  private async execute(board: FeatureBoard, referenceFile: string, active: { controller: AbortController; reason?: string }) {
+  private async execute(board: FeatureBoard, referenceFile: string, active: { controller: AbortController; reason?: string }, prompt: string) {
     const timer = setTimeout(() => { active.reason = '生成超过 30 分钟，已停止。'; active.controller.abort(); }, this.timeoutMs);
     try {
-      const result = await this.executor({ run: { id: board.id }, cwd: this.directory(board.id), prompt: FEATURE_PROMPT, config: board.config, referenceFile, signal: active.controller.signal, outputSchema: path.join(this.directory(board.id), 'schema.json'), readOnly: true });
+      const result = await this.executor({ run: { id: board.id }, cwd: this.directory(board.id), prompt, config: board.config, referenceFile, signal: active.controller.signal, outputSchema: path.join(this.directory(board.id), 'schema.json'), readOnly: true });
       await this.update(board.id, { usage: result.usage, exitCode: result.exitCode });
       if (active.controller.signal.aborted) throw new Error(active.reason);
       if (result.exitCode !== 0 || result.error) throw new Error(result.error || `Codex 退出码：${result.exitCode}`);
       const output = JSON.parse((result.summary || '').trim());
-      const cards = cardsInput(output.cards, true);
-      if (cards.filter(c => c.kind === 'global').length !== 1) fail('生成结果缺少唯一的整体视觉风格卡片，请重新生成。');
-      await this.update(board.id, { status: 'completed', cards });
+      const details=board.generationMode==='details';
+      let cards = details && Array.isArray(output.cards) && !output.cards.length ? [] : cardsInput(output.cards, true);
+      if(details) {
+        if(cards.some(c=>c.kind==='global'))fail('细节补充不能生成整体风格卡片。');
+        const titles=new Set(board.cards.map(c=>c.title.trim().replace(/\s/g,'')));
+        cards=cards.filter(c=>{const title=c.title.trim().replace(/\s/g,'');if(titles.has(title))return false;titles.add(title);return true;});
+        const added=cards.map(c=>({...c,kind:'local' as const,discovery:'detail' as const,selected:false}));
+        const combined=cardsInput([...board.cards,...added]);
+        await this.update(board.id,{status:'completed',cards:combined,addedDetails:added.length});
+      } else {
+        if (cards.filter(c => c.kind === 'global').length !== 1) fail('生成结果缺少唯一的整体视觉风格卡片，请重新生成。');
+        await this.update(board.id, { status: 'completed', cards:cards.map(c=>({...c,discovery:'core'})) });
+      }
     } catch (error) {
       await this.update(board.id, { status: this.stopped ? 'interrupted' : active.reason === '已取消生成。' ? 'cancelled' : 'failed', error: active.reason || (error as Error).message });
     } finally { clearTimeout(timer); }

@@ -3,13 +3,13 @@ import { cp, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promise
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { featureInstruction, selectedFeatures } from '../shared/feature-board.ts';
-import type { FeatureTest, FeatureTestSource } from '../shared/feature-test.ts';
+import type { FeatureTest, FeatureTestSource, FeatureSourceRun } from '../shared/feature-test.ts';
 import type { ModelConfig } from '../shared/types.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { executeCodex, hashWebsite, type Executor } from './codex.ts';
 import { chromeExecutable, inspectWebsite } from './validation.ts';
 import { detectImageType, requireSafeId, safeFilePath } from './security.ts';
-import { fail } from './input.ts';
+import { fail, text } from './input.ts';
 
 const activeStatus = (status: string) => ['queued','running','checking'].includes(status);
 export type TestChecker = (url: string, signal: AbortSignal) => Promise<void>;
@@ -70,6 +70,11 @@ export class FeatureTests {
   }
   async initialize() {
     await mkdir(path.join(this.root,'runs'), { recursive: true });
+    await mkdir(path.join(this.root,'source-runs'), { recursive: true });
+    for(const run of await this.listSourceRuns()) {
+      if(activeStatus(run.status)) await this.persistSourceRun({ ...run, status:'interrupted', error:'服务重启，原网页生成已中断。', finishedAt:new Date().toISOString() });
+      else if(run.status==='completed' && run.source) await this.saveSourceMetadata(run.source);
+    }
     for(const run of await this.list()) if(activeStatus(run.status)) await this.persist({ ...run, status:'interrupted', error:'服务重启，测试已中断。原记录保留。', finishedAt:new Date().toISOString() });
   }
   async getSource(): Promise<FeatureTestSource> {
@@ -92,9 +97,101 @@ export class FeatureTests {
     const target=this.sourceDirectory(baseline.id); await mkdir(path.dirname(target),{recursive:true}); await cp(sourceDir,target,{recursive:true});
     if(await hashWebsite(target)!==baseline.artifactHash) fail('原始网页复制校验失败。',409);
     const source: FeatureTestSource={ experimentId:experiment.id,title:experiment.title,versionId:version.id,versionNumber:version.number,runId:baseline.id,createdAt:baseline.createdAt,hash:baseline.artifactHash,config:version.config };
-    await writeFile(path.join(this.root,'source.json.tmp'),JSON.stringify(source,null,2),{mode:0o600}); await rename(path.join(this.root,'source.json.tmp'),path.join(this.root,'source.json')); return source;
+    await this.saveSourceMetadata(source);
+    await this.publishSource(source); return source;
   }
-  async start(boardId: string, revision: number, image: Buffer, config: ModelConfig): Promise<FeatureTest> {
+  sourceRunDirectory(id: string) { return path.join(this.root, 'source-runs', requireSafeId(id)); }
+  sourceWorkDirectory(id: string) { return path.join(this.sourceRunDirectory(id), 'work'); }
+  sourceRunWebsite(id: string) { return path.join(this.sourceWorkDirectory(id), 'website'); }
+  private async persistSourceRun(run: FeatureSourceRun) {
+    const dir=this.sourceRunDirectory(run.id); await mkdir(dir,{recursive:true});
+    await writeFile(path.join(dir,'run.json.tmp'),JSON.stringify(run,null,2),{mode:0o600});
+    await rename(path.join(dir,'run.json.tmp'),path.join(dir,'run.json'));
+  }
+  async getSourceRun(id: string): Promise<FeatureSourceRun> { return JSON.parse(await readFile(path.join(this.sourceRunDirectory(id),'run.json'),'utf8')); }
+  async listSourceRuns(): Promise<FeatureSourceRun[]> {
+    const entries=await readdir(path.join(this.root,'source-runs'),{withFileTypes:true});
+    const runs=await Promise.all(entries.filter(e=>e.isDirectory()).map(async e=>{try{return await this.getSourceRun(e.name);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}}));
+    return runs.filter((r):r is FeatureSourceRun=>!!r).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  }
+  private async saveSourceMetadata(source: FeatureTestSource) {
+    const dir=path.dirname(this.sourceDirectory(source.runId)); await mkdir(dir,{recursive:true});
+    const file=path.join(dir,'source.json');
+    try {await readFile(file);return;} catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+    const tmp=path.join(dir,`source.${randomUUID()}.tmp`);
+    await writeFile(tmp,JSON.stringify(source,null,2),{mode:0o600});await rename(tmp,file);
+  }
+  private async publishSource(source: FeatureTestSource) {
+    await writeFile(path.join(this.root,'source.json.tmp'),JSON.stringify(source,null,2),{mode:0o600});
+    await rename(path.join(this.root,'source.json.tmp'),path.join(this.root,'source.json'));
+    this.source=source;
+  }
+  async getSourceById(id: string): Promise<FeatureTestSource> {
+    requireSafeId(id);
+    try { return JSON.parse(await readFile(path.join(path.dirname(this.sourceDirectory(id)),'source.json'),'utf8')); }
+    catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error; }
+    const current=await this.getSource();
+    if(current.runId!==id) fail('原始网页不存在。',404);
+    await this.saveSourceMetadata(current); return current;
+  }
+  async listSources(): Promise<FeatureTestSource[]> {
+    // Preserve the original imported baseline when the first custom page is created.
+    try { await this.saveSourceMetadata(await this.getSource()); }
+    catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT' && (error as {status?:number}).status!==409)throw error; }
+    await mkdir(path.join(this.root,'sources'),{recursive:true});
+    const entries=await readdir(path.join(this.root,'sources'),{withFileTypes:true});
+    const sources=await Promise.all(entries.filter(e=>e.isDirectory()).map(async e=>{
+      try{return JSON.parse(await readFile(path.join(this.root,'sources',e.name,'source.json'),'utf8')) as FeatureTestSource;}
+      catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}
+    }));
+    return sources.filter((s):s is FeatureTestSource=>!!s).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  }
+  async generateSource(requirements: string, config: ModelConfig): Promise<FeatureSourceRun> {
+    requirements=text(requirements,'网页需求',12000).trim();
+    if(this.stopped || this.preparing || this.active) fail('已有网页任务正在执行，请等待完成或取消后再试。',409);
+    let prepared!:()=>void; this.preparing=new Promise<void>(resolve=>{prepared=resolve;});
+    try {
+      await this.listSources();
+      const id=randomUUID(); await mkdir(this.sourceRunWebsite(id),{recursive:true});
+      const prompt=`请根据以下用户需求生成一份完整、可使用的网页。自行决定合适的视觉设计。\n只在 website/ 下交付静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html。本地资源使用相对路径，无需构建或安装依赖。允许通过 HTTPS 加载字体与字体样式表，其他资源保持本地化，不使用远程脚本、业务接口或依赖 localStorage。交互应实际可用，演示数据保持固定。完成后简述交付内容。\n\n用户需求：\n${requirements}`;
+      const run:FeatureSourceRun={id,requirements,prompt,config,createdAt:new Date().toISOString(),status:'running'};
+      await writeFile(path.join(this.sourceRunDirectory(id),'input.json'),JSON.stringify(run,null,2));
+      await writeFile(path.join(this.sourceRunDirectory(id),'prompt.txt'),prompt);
+      if(this.stopped) {run.status='interrupted';run.error='服务停止，原网页生成未启动。';await this.persistSourceRun(run);return run;}
+      await this.persistSourceRun(run);
+      const active={id,controller:new AbortController(),promise:Promise.resolve(),reason:undefined as 'cancelled'|'interrupted'|'timeout'|undefined};this.active=active;
+      active.promise=this.executeSource(run,active).finally(()=>{this.active=undefined;});return structuredClone(run);
+    } finally {this.preparing=undefined;prepared();}
+  }
+  private async executeSource(run: FeatureSourceRun, active: NonNullable<FeatureTests['active']>) {
+    const timer=setTimeout(()=>{active.reason='timeout';active.controller.abort();},this.timeoutMs);
+    try {
+      const result=await this.executor({run:{id:run.id},cwd:this.sourceWorkDirectory(run.id),prompt:run.prompt,config:run.config,signal:active.controller.signal});
+      Object.assign(run,{exitCode:result.exitCode,usage:result.usage,summary:result.summary});
+      if(active.controller.signal.aborted)throw new Error('生成已停止。');
+      if(result.exitCode!==0 || result.error)throw new Error(result.error || `Codex 退出码：${result.exitCode}`);
+      await inspectWebsite(this.sourceRunWebsite(run.id));
+      run.status='checking';await this.persistSourceRun(run);
+      await this.checker(`${this.previewOrigin}/feature-tests/source-runs/${run.id}/index.html`,active.controller.signal);
+      if(active.controller.signal.aborted)throw new Error('生成已停止。');
+      const hash=await hashWebsite(this.sourceRunWebsite(run.id));
+      await mkdir(path.dirname(this.sourceDirectory(run.id)),{recursive:true});
+      await cp(this.sourceRunWebsite(run.id),this.sourceDirectory(run.id),{recursive:true});
+      if(await hashWebsite(this.sourceDirectory(run.id))!==hash)throw new Error('原网页冻结副本校验失败。');
+      if(active.controller.signal.aborted)throw new Error('生成已停止。');
+      const source:FeatureTestSource={experimentId:run.id,versionId:run.id,versionNumber:1,runId:run.id,title:run.requirements.slice(0,60),requirements:run.requirements,createdAt:run.createdAt,hash,config:run.config};
+      run.source=source;run.status='completed';
+    } catch(error) {
+      run.status=active.reason==='cancelled'?'cancelled':active.reason==='interrupted'?'interrupted':'failed';
+      run.error=active.reason==='timeout'?'原网页生成超过 30 分钟，已停止。':active.reason==='cancelled'?'已取消原网页生成。':active.reason==='interrupted'?'服务停止，原网页生成中断。':(error as Error).message;
+    } finally {
+      clearTimeout(timer);run.finishedAt=new Date().toISOString();run.elapsedMs=Date.now()-Date.parse(run.createdAt);await this.persistSourceRun(run);
+      // Publish only terminal successful outputs; failed or interrupted jobs cannot replace the original page.
+      if(run.status==='completed' && run.source)await this.saveSourceMetadata(run.source);
+    }
+  }
+  async cancelSource(id: string) {await this.preparing;if(this.active?.id===id){this.active.reason='cancelled';this.active.controller.abort();await this.active.promise;}return this.getSourceRun(id);}
+  async start(boardId: string, revision: number, image: Buffer, config: ModelConfig, sourceId?: string): Promise<FeatureTest> {
     if(this.stopped || this.preparing || this.active) fail('已有测试正在执行，请等待完成或取消后再试。',409);
     let prepared!:()=>void; this.preparing=new Promise<void>(resolve=>{prepared=resolve;});
     try {
@@ -102,12 +199,12 @@ export class FeatureTests {
       if(board.revision!==revision) fail('卡片已更新，请用当前选择重新测试。',409);
       if(board.status==='running' || !selectedFeatures(board).length) fail('请先完成并勾选要验证的卡片。');
       if(detectImageType(image)?.mimeType!=='image/png') fail('测试需要导出的 PNG 卡片图片。');
-      const source=await this.getSource();
+      const source=sourceId ? await this.getSourceById(sourceId) : await this.getSource();
       if(await hashWebsite(this.sourceDirectory(source.runId))!==source.hash) fail('冻结的验证基线已改变。',409);
       const id=randomUUID(), dir=this.directory(id); await mkdir(this.workDirectory(id),{recursive:true});
       await cp(this.sourceDirectory(source.runId),this.websiteDirectory(id),{recursive:true});
       if(await hashWebsite(this.websiteDirectory(id))!==source.hash) fail('测试副本校验失败。',409);
-      const prompt=`website/ 中已有一份完整的项目管理网页，请直接修改这个副本。交付静态 HTML、CSS、JavaScript，入口为 website/index.html。本地资源使用相对路径；字体是允许的外部依赖，可以通过 HTTPS 字体样式表或 @font-face 直接加载远程字体。其他资源仍保持本地化，不引入远程脚本或业务接口。\n\n${featureInstruction(board)}`;
+      const prompt=`website/ 中已有一份完整的网页，请直接修改这个副本。交付静态 HTML、CSS、JavaScript，入口为 website/index.html。本地资源使用相对路径；字体是允许的外部依赖，可以通过 HTTPS 字体样式表或 @font-face 直接加载远程字体。其他资源仍保持本地化，不引入远程脚本或业务接口。\n\n${featureInstruction(board)}`;
       const run: FeatureTest={id,boardId,boardRevision:revision,board,source,config,prompt,imageHash:createHash('sha256').update(image).digest('hex'),createdAt:new Date().toISOString(),status:'running',hasPreview:false};
       await writeFile(path.join(dir,'reference.png'),image); await writeFile(path.join(dir,'prompt.txt'),prompt); await writeFile(path.join(dir,'input.json'),JSON.stringify(run,null,2));
       if(this.stopped) { run.status='interrupted'; run.error='服务停止，测试未启动。'; await this.persist(run); return run; }
