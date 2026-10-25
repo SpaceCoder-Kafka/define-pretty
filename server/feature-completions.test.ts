@@ -7,9 +7,15 @@ import { FileStore } from './store.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FeatureCompletions } from './feature-completions.ts';
 import type { Executor } from './codex.ts';
+import { layoutDiagramSchema, parseLayoutDiagram, type LayoutDiagram } from '../shared/layout-diagram.ts';
 
 const config={model:'test',reasoningEffort:'medium',cliVersion:'test'};
 const result={description:'框内有浅色图标块。',effect:'入口有分组，不抢主要内容。',instruction:'• 同组尺寸一致。\n• 空间不足时允许换行，保留等距。',applicability:'适合少量辅助入口；长说明应保留文字。'};
+const layout:LayoutDiagram={aspectRatio:1.6,blocks:[
+  {label:'导航约 7%',x:.05,y:.04,width:.9,height:.08,role:'navigation'},
+  {label:'主内容约 56%',x:.05,y:.15,width:.7,height:.8,role:'main'},
+  {label:'重点摘要约 10%',x:.63,y:.28,width:.32,height:.3,role:'highlight'},
+]};
 const png=Buffer.from('89504e470d0a1a0a0000000d494844520000000100000001','hex');
 async function fixture(executor:Executor,timeout=1000){
   const dir=await mkdtemp(path.join(os.tmpdir(),'pretty-completion-')),store=new FileStore(dir);await store.initialize();
@@ -22,14 +28,72 @@ async function fixture(executor:Executor,timeout=1000){
 async function waitFor(check:()=>Promise<boolean>){for(let i=0;i<300;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('did not finish');}
 
 test('completion uses unsaved intent and crop, returns only generated fields, and never overwrites the board',async()=>{
-  let prompt='';const f=await fixture(async options=>{prompt=options.prompt;assert.equal(options.readOnly,true);assert.equal(options.referenceFiles?.length,2);assert(options.referenceFiles![0].endsWith('crop.png'));const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));assert.deepEqual(schema.required,['description','effect','instruction','applicability']);return {exitCode:0,summary:JSON.stringify({...result,title:'不要接受这个标题',region:{x:0,y:0,width:1,height:1}}),usage:{output_tokens:20}};});
+  let prompt='';const f=await fixture(async options=>{prompt=options.prompt;assert.equal(options.readOnly,true);assert.equal(options.referenceFiles?.length,2);assert(options.referenceFiles![0].endsWith('crop.png'));const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));assert.deepEqual(schema.required,['description','effect','instruction','applicability']);assert.equal(schema.properties.layout,undefined);return {exitCode:0,summary:JSON.stringify({...result,title:'不要接受这个标题',region:{x:0,y:0,width:1,height:1},layout}),usage:{output_tokens:20}};});
   try {
     const before=await readFile(path.join(f.boards.directory(f.board.id),'board.json'));
     const job=await f.jobs.start(f.board.id,f.input,config);await waitFor(async()=>(await f.jobs.get(job.id)).status==='completed');
     const done=await f.jobs.get(job.id);assert.deepEqual(done.result,result);assert.equal(done.title,f.input.title);assert.deepEqual(done.region,f.input.region);assert.deepEqual(f.crops,[f.input.region]);assert(prompt.includes(f.input.title));assert(prompt.includes('不改写用户标题'));
+    assert.match(prompt, /布局关系的应用范围由内容用途和规则决定/);
+    assert.match(prompt, /只借鉴字体、配色或装饰时，不附加整页重排要求/);
+    assert(!prompt.includes('不扩大为整页改造'));
     assert.deepEqual(await readFile(path.join(f.boards.directory(f.board.id),'board.json')),before);
     const restarted=new FeatureCompletions(f.boards,f.store);await restarted.initialize();assert.deepEqual((await restarted.get(job.id)).result,result);
   }finally{await f.cleanup();}
+});
+
+test('layout diagrams preserve proportional overlap and drawing order while rejecting malformed input',()=>{
+  const parsed=parseLayoutDiagram(layout);
+  assert.deepEqual(parsed,layout);assert.notEqual(parsed,layout);assert.notEqual(parsed.blocks,layout.blocks);
+  parsed.blocks[0].label='修改副本';assert.equal(layout.blocks[0].label,'导航约 7%');
+  const block=layout.blocks[0];
+  const invalidBlocks=[
+    {...block,label:''},{...block,label:' '},{...block,label:'长'.repeat(41)},
+    {...block,x:-.01},{...block,y:1},{...block,width:0},{...block,height:1.01},
+    {...block,x:.8,width:.4},{...block,y:.9,height:.2},{...block,width:NaN},
+    {...block,x:'0'},{...block,role:'decoration'},{...block,color:'red'},
+  ];
+  for(const value of [null,undefined,{}, {...layout,aspectRatio:.39},{...layout,aspectRatio:3.01},{...layout,aspectRatio:Infinity},
+    {...layout,blocks:[block]},{...layout,blocks:Array(9).fill(block)},{...layout,extra:true},
+    ...invalidBlocks.map(block=>({...layout,blocks:[block,layout.blocks[1]]})),
+  ]) assert.throws(()=>parseLayoutDiagram(value));
+});
+
+test('layout completion returns a validated proportion diagram as a draft without changing the selected card',async()=>{
+  let prompt='';
+  const f=await fixture(async options=>{
+    prompt=options.prompt;
+    assert.equal(options.readOnly,true);
+    const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));
+    assert.deepEqual(schema.required,['description','effect','instruction','applicability','layout']);
+    assert.deepEqual(schema.properties.layout,layoutDiagramSchema);
+    return {exitCode:0,summary:JSON.stringify({...result,layout}),usage:{output_tokens:30}};
+  });
+  try {
+    const board=await f.boards.edit(f.board.id,{revision:f.board.revision,title:f.board.title,cards:[{...f.board.cards[0],kind:'layout'}]});
+    const before=await readFile(path.join(f.boards.directory(board.id),'board.json'));
+    const job=await f.jobs.start(board.id,{...f.input,revision:board.revision},config);
+    await waitFor(async()=>!['running','checking'].includes((await f.jobs.get(job.id)).status));
+    const done=await f.jobs.get(job.id);
+    assert.equal(done.status,'completed',done.error);assert.deepEqual(done.result,{...result,layout});
+    assert.match(prompt,/比例色块图/);assert.match(prompt,/不生成候选方案/);assert.match(prompt,/不是精确测量/);
+    assert.deepEqual(done.region,f.input.region);assert.deepEqual(f.crops,[f.input.region]);
+    assert.deepEqual(await readFile(path.join(f.boards.directory(board.id),'board.json')),before);
+    const restarted=new FeatureCompletions(f.boards,f.store);await restarted.initialize();assert.deepEqual((await restarted.get(job.id)).result?.layout,layout);
+  }finally{await f.cleanup();}
+});
+
+test('missing or invalid layout diagrams fail completion without returning partial rules or overwriting the card',async()=>{
+  for(const diagram of [undefined,null,{...layout,blocks:[{...layout.blocks[0],x:.8,width:.9},layout.blocks[1]]}]) {
+    const f=await fixture(async()=>({exitCode:0,summary:JSON.stringify({...result,layout:diagram})}));
+    try {
+      const board=await f.boards.edit(f.board.id,{revision:f.board.revision,title:f.board.title,cards:[{...f.board.cards[0],kind:'layout'}]});
+      const job=await f.jobs.start(board.id,{...f.input,revision:board.revision},config);
+      await waitFor(async()=>(await f.jobs.get(job.id)).status==='failed');
+      const failed=await f.jobs.get(job.id);
+      assert.equal(failed.result,undefined);assert.match(failed.error!,/布局/);
+      assert.deepEqual((await f.boards.get(board.id)).cards,board.cards);
+    }finally{await f.cleanup();}
+  }
 });
 test('invalid region, empty intent and stale revision never invoke model; malformed output stays failed',async()=>{
   let calls=0;const f=await fixture(async()=>{calls++;return {exitCode:0,summary:JSON.stringify({...result,instruction:''})};});
@@ -54,7 +118,7 @@ test('overlap, cancellation, timeout and restart preserve terminal states withou
 
 test('global completion uses the full reference and global guidance without changing existing local cards', async () => {
   let prompt = '';
-  const f = await fixture(async options => { prompt = options.prompt; return { exitCode: 0, summary: JSON.stringify(result) }; });
+  const f = await fixture(async options => { prompt = options.prompt; const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));assert.deepEqual(schema.required,['description','effect','instruction','applicability']);assert.equal(schema.properties.layout,undefined);return { exitCode: 0, summary: JSON.stringify(result) }; });
   try {
     const local = structuredClone(f.board.cards[0]);
     const board = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards: [local, { ...local, id: 'global', kind: 'global', instruction: '', effect: '', applicability: '', selected: false }] });
@@ -64,7 +128,8 @@ test('global completion uses the full reference and global guidance without chan
     assert.equal(done.title, '整体视觉风格');
     assert.deepEqual(done.region, { x: 0, y: 0, width: 1, height: 1 });
     assert.deepEqual(f.crops, [done.region]);
-    assert.match(prompt, /独立的整页卡片/);
+    assert.match(prompt, /不默认授权重新分组、重排整页/);
+    assert.match(prompt, /本次补全只输出上述四个字段/);
     assert(!prompt.includes('不扩大为整页改造'));
     assert(!prompt.includes('本次生成一个完整特征板'));
     assert.deepEqual((await f.boards.get(board.id)).cards.find(c => c.id === local.id), local);

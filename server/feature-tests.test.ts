@@ -26,6 +26,43 @@ async function fixture(executor?:Executor, timeout=1000) {
   return {dir,main,html,hash,board,boards,store,tests,cleanup:async()=>{await tests.shutdown();await boards.shutdown();await rm(dir,{recursive:true,force:true});}};
 }
 async function done(fn:()=>Promise<boolean>){for(let i=0;i<200;i++){if(await fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('did not finish');}
+test('selected layout and global cards directly implement the approved rules in one model call',async()=>{
+  const diagram={aspectRatio:1.6,blocks:[
+    {label:'LAYOUT-MAIN-REGION',x:.05,y:.15,width:.7,height:.8,role:'main'},
+    {label:'LAYOUT-HIGHLIGHT-REGION',x:.63,y:.28,width:.32,height:.3,role:'highlight'},
+  ]};
+  for(const selection of ['layout','global','both']) {
+    let calls=0,observedPrompt='';
+    const f=await fixture(async options=>{
+      calls++;observedPrompt=options.prompt;
+      assert.equal(options.readOnly,undefined);assert.equal(options.outputSchema,undefined);
+      assert.deepEqual(await readFile(options.referenceFile!),png);
+      assert(!options.prompt.includes('不要发送这条规范'));
+      await writeFile(path.join(options.cwd,'website/index.html'),'<main>按已选结构重构后的业务内容</main>');
+      return {exitCode:0,summary:'直接重构完成',usage:{input_tokens:10,output_tokens:5}};
+    });
+    try {
+      const board=await f.boards.edit(f.board.id,{revision:f.board.revision,title:f.board.title,cards:[
+        {id:'global',kind:'global',title:'整体视觉风格',description:'窗口具有主次',effect:'建立阅读焦点',instruction:'GLOBAL-APPROVED-RELATION',applicability:'有主要与补充信息的区域',selected:selection!=='layout',application:'仅经历区域',region:{x:0,y:0,width:1,height:1}},
+        {id:'layout',kind:'layout',layout:diagram,title:'主内容与摘要错层排列',description:'摘要跨越主体边界',effect:'先读摘要再读详情',instruction:'LAYOUT-APPROVED-RELATION',applicability:'主内容与摘要',selected:selection!=='global',application:'仅经历区域',region:{x:0,y:0,width:1,height:1}},
+        f.board.cards.find(card=>card.id==='excluded')!,
+      ]});
+      const run=await f.tests.start(board.id,board.revision,png,config);
+      await done(async()=>!['running','checking'].includes((await f.tests.get(run.id)).status));
+      const result=await f.tests.get(run.id);
+      assert.equal(result.status,'completed',result.error);assert.equal(calls,1);
+      assert.equal(observedPrompt,result.prompt);assert(result.prompt.endsWith(featureInstruction(board)));
+      assert.equal(observedPrompt.includes('LAYOUT-APPROVED-RELATION'),selection!=='global');
+      assert.equal(observedPrompt.includes(JSON.stringify(diagram)),selection!=='global');
+      assert.equal(observedPrompt.includes('GLOBAL-APPROVED-RELATION'),selection!=='layout');
+      assert.match(observedPrompt,/仅经历区域/);
+      assert.equal(Object.hasOwn(result,'layoutPlan'),false);assert.equal(Object.hasOwn(result,'phase'),false);
+      assert.deepEqual(result.usage,{input_tokens:10,output_tokens:5});
+      assert.equal(await hashWebsite(f.tests.sourceDirectory(result.source.runId)),f.hash);
+    }finally{await f.cleanup();}
+  }
+});
+
 test('imports latest baseline read-only; sends exact selected export and instructions; later tests start from same baseline',async()=>{
   const seen:string[]=[];
   const f=await fixture(async options=>{seen.push(await readFile(path.join(options.cwd,'website/index.html'),'utf8'));assert.deepEqual(await readFile(options.referenceFile!),png);assert(!options.referenceFile!.startsWith(options.cwd+'/'));assert(!options.prompt.includes('不要发送这条规范'));await writeFile(path.join(options.cwd,'website/index.html'),'<h1>修改后</h1>');return {exitCode:0,summary:'done'};});

@@ -10,6 +10,10 @@ import type { Executor } from './codex.ts';
 
 const config = { model: 'test', reasoningEffort: 'medium', cliVersion: 'test' };
 const generated = { title: '用深色突出主要操作', description: '主要操作使用实心深色，与浅色页面形成对比。', instruction: '把主要操作设为实心深色，次要操作保持轻量。', effect: '让主要操作成为视觉入口。', adaptation: '迁移建议：按钮宽度随文案增长，保留主次对比。', applicability: '具有主次操作关系的工具栏或表单。', region: { x: .2, y: .3, width: .4, height: .2 } };
+const layout = { aspectRatio: 2, blocks: [
+  { label: '主要内容约58%', role: 'main', x: .1, y: .05, width: .5, height: .9 },
+  { label: '辅助内容约42%', role: 'support', x: .62, y: .05, width: .36, height: .9 },
+] };
 async function fixture(executor?: Executor) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'pretty-features-'));
   const store = new FileStore(root); await store.initialize();
@@ -54,7 +58,7 @@ test('real generation contract snapshots input and keeps old cards when starting
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
     const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 1); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
-    assert.equal(input.cardFormat, 5); assert.equal(input.guidanceVersion, 7);
+    assert.equal(input.cardFormat, 6); assert.equal(input.guidanceVersion, 9);
     assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
     await assert.rejects(f.boards.generate(board.id), { status: 409 });
     const next = await f.boards.create(board.reference.id, config, board.title); assert.notEqual(next.id, board.id); assert.equal((await f.boards.get(board.id)).cards.length, 1);
@@ -151,12 +155,78 @@ test('global style is a single fixed full-image card, remains optional, and dire
     saved.cards[0].selected = true;
     const selected = featureInstruction(saved);
     assert.match(selected, /已选中“整体视觉风格”/);
-    assert.match(selected, /整页视觉协调/);
-    assert.match(selected, /未选择的局部卡片/);
+    assert.match(selected, /整页视觉风格协调/);
+    assert.match(selected, /不因为整体风格、配色、字体或装饰要求而默认重排整页/);
+    assert.match(selected, /整体风格卡不代替布局结构卡的选择/);
+    assert.match(selected, /未选择的专项卡片/);
     assert.match(selected, /1. 整体视觉风格/);
     await assert.rejects(f.boards.edit(saved.id, { revision: saved.revision, title: saved.title, cards: [local] }), /固定卡片/);
     const edited = await f.boards.edit(saved.id, { revision: saved.revision, title: saved.title, cards: saved.cards });
     assert.equal((await f.boards.get(edited.id)).cards[0].selected, true);
+  } finally { await f.cleanup(); }
+});
+
+test('layout selection directly authorizes its structure, respects scope, and excludes unselected diagrams', async () => {
+  const f = await fixture();
+  try {
+    const structure = { ...cardsInput([{ ...generated, title: '宽主栏与辅助栏', kind: 'layout', layout }], true)[0], selected: true, application: '只重新设计项目展示区，其他区域保持现状' };
+    const hidden = { ...cardsInput([{ ...generated, title: '未选的霓虹装饰', instruction: 'HIDDEN-NEON-RULE' }], true)[0], selected: false };
+    const layoutBoard = { ...f.board, cards: [structure, hidden] };
+    const prompt = featureInstruction(layoutBoard);
+    assert(prompt.includes(structure.application));
+    assert.match(prompt, /范围之外仅做必要的衔接调整/);
+    assert.match(prompt, /不以保留原有布局或改动最少为目标/);
+    assert.match(prompt, /直接按这套结构实施/);
+    assert.match(prompt, /主要内容约58%/);
+    assert.match(prompt, /观察估计/);
+    assert(!prompt.includes('三个结构明显不同'));
+    assert(!prompt.includes(hidden.instruction));
+    const localPrompt = featureInstruction({ ...layoutBoard, cards: [{ ...structure, selected: false }, { ...hidden, selected: true }] });
+    assert.match(localPrompt, /不因为整体风格、配色、字体或装饰要求而默认重排整页/);
+    assert(!localPrompt.includes('已选中布局结构卡：'));
+    assert(!localPrompt.includes(structure.application));
+    assert(!localPrompt.includes('主要内容约58%'));
+    assert.match(localPrompt, /历史专项卡若明确描述布局关系/);
+  } finally { await f.cleanup(); }
+});
+
+test('layout diagrams validate, keep concrete titles, persist through edits and sort before other specialties', async () => {
+  const f = await fixture();
+  try {
+    const cards = cardsInput([{ ...generated, kind: 'local' }, { ...generated, kind: 'layout', title: '宽主栏与辅助栏', layout }, { ...generated, kind: 'global' }], true);
+    assert.deepEqual(cards.map(card => card.kind), ['global', 'layout', 'local']);
+    assert.equal(cards[1].title, '宽主栏与辅助栏');
+    assert.deepEqual(cards[1].region, generated.region);
+    assert.deepEqual(cards[1].layout, layout);
+    cards[1].selected = true;
+    const saved = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards });
+    assert.deepEqual((await f.boards.get(saved.id)).cards[1], cards[1]);
+    assert.throws(() => cardsInput([cards[1], { ...cards[1], id: 'another-layout' }]), /最多一张布局/);
+    assert.throws(() => cardsInput([{ ...generated, kind: 'layout' }], true), /需要比例色块/);
+    assert.throws(() => cardsInput([{ ...cards[1], layout: { ...layout, blocks: [] } }]), /2–8/);
+    assert.throws(() => cardsInput([{ ...cards[1], kind: 'local' }]), /只有布局/);
+    // Layout drafts remain editable, but only complete diagrams can be selected.
+    const draft = cardsInput([{ ...cards[1], layout: undefined, instruction: '' }])[0];
+    assert.equal(draft.kind, 'layout'); assert.equal(draft.selected, false); assert.equal(featureReady(draft), false);
+    assert(featureSchema.properties.cards.items.required.includes('layout'));
+  } finally { await f.cleanup(); }
+});
+
+test('detail discovery preserves a selected layout and rejects a new structural card from the model', async () => {
+  let newLayout = false;
+  const f = await fixture(async () => ({ exitCode: 0, summary: JSON.stringify({ cards: newLayout ? [{ ...generated, kind: 'layout', layout }] : [{ ...generated, kind: 'local', title: '新的细节' }] }) }));
+  try {
+    const cards = cardsInput([{ ...generated, kind: 'layout', layout }], true); cards[0].selected = true;
+    const parent = await f.boards.edit(f.board.id, { revision: f.board.revision, title: f.board.title, cards });
+    const next = await f.boards.generate(parent.id, { revision: parent.revision, config });
+    await waitFor(async () => (await f.boards.get(next.id)).status === 'completed');
+    assert.deepEqual((await f.boards.get(next.id)).cards[0], parent.cards[0]);
+    newLayout = true;
+    const invalid = await f.boards.generate(parent.id, { revision: parent.revision, config });
+    await waitFor(async () => (await f.boards.get(invalid.id)).status === 'failed');
+    const result = await f.boards.get(invalid.id);
+    assert.match(result.error!, /细节补充不能生成/);
+    assert.deepEqual(result.cards, parent.cards);
   } finally { await f.cleanup(); }
 });
 
