@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseFeatureSpec, specTable, type FeatureSpec, type TypographySpec, type PaletteSpec, type SpacingSpec, type AttributeSpec } from '../shared/feature-spec.ts';
-import { featureApplication, featureFoundation, featureInstruction, featureReady, featureTier, selectedFeatures, type FeatureBoard, type FeatureCard } from '../shared/feature-board.ts';
+import { featureApplication, featureFoundation, featureInstruction, featureReady, featureTier, selectedFeatures, STYLE_TRANSFER_GUIDANCE, type FeatureBoard, type FeatureCard } from '../shared/feature-board.ts';
 
 const typeSpec: TypographySpec = { kind: 'typography', basis: '以内容区宽度估计；字体为建议候选。', referenceWidth: 960, rows: [
   { role: 'page-title', label: '页面标题', fontFamily: 'Arial, sans-serif', fontEvidence: 'suggested', sizePx: 48, weight: 700, lineHeightPx: 56, letterSpacingEm: .02, evidence: 'estimated' },
@@ -93,12 +93,13 @@ test('explicit user requirements and mixed parameter evidence reach the model wi
     { property: '纸张纹理', value: '低对比纤维与细颗粒，可使用本地图片层', scope: '插画背景', evidence: 'estimated' },
     { property: '图片格式', value: 'PNG 或 WebP', scope: '插画素材', evidence: 'suggested' },
   ] };
-  const chosen = card({ tier: 'signature', kind: 'local', spec, application: '仅首屏插画；描边固定为 2px，不改变已有导航。' });
+  const chosen = card({ tier: 'signature', kind: 'local', spec, application: '仅课程首屏插画；保留本站猫头鹰吉祥物，描边固定为 2px，不改变已有导航。' });
   const input = board([chosen]);
   const before = JSON.stringify(input);
   const prompt = featureInstruction(input);
   assert(prompt.includes(JSON.stringify(spec)));
   assert(prompt.includes(chosen.application));
+  assert(prompt.includes(STYLE_TRANSFER_GUIDANCE));
   assert.match(prompt, /用户明确的应用区域、固定值及禁改要求优先/);
   assert.match(prompt, /原图仅补充已选特征/);
   assert.match(prompt, /适合生图时可直接调用/);
@@ -106,13 +107,14 @@ test('explicit user requirements and mixed parameter evidence reach the model wi
 });
 
 test('legacy refinement describes only available visual inputs without expanding selected scope', () => {
-  const selected = card({ application: '仅主视觉插画，不修改导航。' });
+  const selected = card({ instruction: '参考中的人物坐在桌旁，使用细黑轮廓线与平涂橙色色块。', application: '仅主视觉插画，表达本站课程学习过程，不修改导航。' });
   const input = board([selected, card({ id: 'hidden', selected: false, instruction: 'UNSELECTED-DETAIL' })]);
   const before = JSON.stringify(input);
   const prompt = featureInstruction(input, { hasOriginalReference: false });
   assert.match(prompt, /本次仅附所选卡片图/);
   assert(!prompt.includes('第二张为无标记原图'));
   assert(prompt.includes(selected.application));
+  assert(prompt.includes(STYLE_TRANSFER_GUIDANCE));
   assert(!prompt.includes('UNSELECTED-DETAIL'));
   assert.match(prompt, /未选中布局结构卡/);
   assert.equal(JSON.stringify(input), before);

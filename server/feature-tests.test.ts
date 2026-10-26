@@ -9,7 +9,7 @@ import { checkFeatureTest, FeatureTests } from './feature-tests.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FileStore } from './store.ts';
 import { hashWebsite, type Executor } from './codex.ts';
-import { featureInstruction } from '../shared/feature-board.ts';
+import { featureInstruction, STYLE_TRANSFER_GUIDANCE } from '../shared/feature-board.ts';
 import { parseLayoutDiagram } from '../shared/layout-diagram.ts';
 import type { PaletteSpec } from '../shared/feature-spec.ts';
 import { builtinSourceCatalog, builtinWebsiteRoot } from './builtin-sources.ts';
@@ -132,6 +132,7 @@ test('freezes distinct card and original images in order and rejects changed ori
     assert.deepEqual(await readFile(options.referenceFiles![0]),cardImage);
     assert.deepEqual(await readFile(options.referenceFiles![1]),png);
     for (const file of options.referenceFiles!) assert(!file.startsWith(options.cwd+path.sep));
+    assert(options.prompt.includes(STYLE_TRANSFER_GUIDANCE));
     assert.match(options.prompt,/第二张.*无标记原图/);
     assert.match(options.prompt,/不扩大修改范围/);
     assert.match(options.prompt,/安装依赖、构建/);
@@ -550,6 +551,7 @@ test('refinement continues a failed result in isolation with frozen selection, i
     assert.equal(await realpath(options.referenceFiles![1]),await realpath(path.resolve(options.cwd,'../original-reference.png')));
     assert(options.prompt.includes('../reference.png'));
     assert(options.prompt.includes('../original-reference.png'));
+    assert(options.prompt.includes(STYLE_TRANSFER_GUIDANCE));
     assert(!options.prompt.includes('不要发送这条规范'));
     const input=JSON.parse(await readFile(path.join(options.cwd,'../input.json'),'utf8'));
     assert.equal(input.prompt,options.prompt);

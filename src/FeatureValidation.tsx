@@ -30,7 +30,7 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
     else localStorage.removeItem('pretty-source-builtin');
   },[sourceId,source?.builtin?.slug]);
   useEffect(()=>{ if(!bootstrap)return; let live=true;
-    setConfig(bootstrap.defaults.config);
+    setConfig({ ...bootstrap.defaults.config, model: 'gpt-6.1-sol', reasoningEffort: 'medium' });
     const refresh=async()=>{
       const [available,jobs]=await Promise.all([api<FeatureTestSource[]>('/feature-tests/sources'),api<FeatureSourceRun[]>('/feature-source-runs')]);
       if(!live)return;
@@ -221,7 +221,7 @@ export default function FeatureValidation({state}: {state:State}) {
   useEffect(()=>{setFeedback('');},[current?.id]);
   const parentIndex=current?.refinement?state.runs.findIndex(run=>run.id===current.refinement!.parentTestId):-1;
   return <section className="feature-validation" id="original-websites" ref={state.section}>
-    <div className="feature-validation-head"><div><h2><FlaskConical size={20}/>验证所选设计</h2><p>首次测试从冻结的原网页开始，将卡片图、无标记原图与指令交给 Codex；之后可按反馈继续优化结果。</p></div><span>统一视口 · 1440 × 1000</span></div>
+    <div className="feature-validation-head"><div><h2><FlaskConical size={20}/>验证所选设计</h2><p>从冻结的原网页开始，借鉴所选特征的风格，为当前网站创作素材；可按反馈继续优化。</p></div><span>统一视口 · 1440 × 1000</span></div>
     {original&&<p className="feature-test-source">{current?'本次历史对比的原网页':'当前原网页'}：{original.title} · {original.builtin?'内置网页':new Date(original.createdAt).toLocaleString('zh-CN')} · 已冻结副本{current&&source&&source.runId!==original.runId?`（下一次测试将使用「${source.title}」）`:''}</p>}
     <div className="feature-test-controls">{config&&<><label>测试模型<input value={config.model} disabled={state.busy} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>用于生成原网页、测试与继续优化 · 与卡片生成配置独立</span></>}
     {state.runs.length>0&&<label className="feature-test-history">测试历史<select value={state.selectedId} onChange={e=>state.setSelectedId(e.target.value)}><option value="">当前原网页 · 尚未选择测试结果</option>{state.runs.map((r,i)=><option key={r.id} value={r.id}>第 {state.runs.length-i} 次 · {new Date(r.createdAt).toLocaleTimeString('zh-CN')} · {labels[r.status]}</option>)}</select></label>}</div>
@@ -237,10 +237,10 @@ export default function FeatureValidation({state}: {state:State}) {
       <label htmlFor={feedbackId}>希望继续改进什么</label>
       <p>继续修改此结果，沿用它保存的卡片选择、参考图和原网页，每轮结果都会保留。</p>
       {state.refinementUsesSavedInput&&<p className="feature-refinement-scope">当前卡片版本或原网页选择与此结果不同。要应用当前选择，请使用「测试所选设计」。</p>}
-      <textarea id={feedbackId} rows={3} maxLength={4000} disabled={state.busy||state.running} value={feedback} onChange={event=>setFeedback(event.target.value)} placeholder="例如：插画更贴近参考图的扁平线描，项目预览补足细节，并检查标题与留白比例。"/>
+      <textarea id={feedbackId} rows={3} maxLength={4000} disabled={state.busy||state.running} value={feedback} onChange={event=>setFeedback(event.target.value)} placeholder="例如：沿用参考图的线描、色面与质感，围绕本站业务主题重新设计插画，并检查标题与留白比例。"/>
       <button className="feature-button primary" disabled={!feedback.trim()||state.busy||state.running||!state.authenticated||!config} onClick={()=>void state.refine(feedback)}>继续优化此结果</button>
     </div>}
-    {current&&<details className="feature-test-input"><summary>查看本次实际输入图片与完整指令</summary><div><div className="feature-test-input-images"><figure><figcaption>图片 1 · 所选卡片图</figcaption><img src={`/api/feature-tests/${current.id}/image`} alt="本次发送给 Codex 的所选卡片图片"/></figure>{current.originalReference&&<figure><figcaption>图片 2 · 无标记原图</figcaption><p>仅补充已选特征的视觉依据，不扩大修改范围。</p><img src={`/api/feature-tests/${current.id}/original-reference`} alt="本次发送给 Codex 的冻结无标记原图"/></figure>}</div><pre>{current.prompt}</pre></div></details>}
+    {current&&<details className="feature-test-input"><summary>查看本次实际输入图片与完整指令</summary><div><div className="feature-test-input-images"><figure><figcaption>图片 1 · 所选卡片图</figcaption><img src={`/api/feature-tests/${current.id}/image`} alt="本次发送给 Codex 的所选卡片图片"/></figure>{current.originalReference&&<figure><figcaption>图片 2 · 无标记原图</figcaption><p>提供已选特征的风格依据，素材主题与用途以当前网站为准。</p><img src={`/api/feature-tests/${current.id}/original-reference`} alt="本次发送给 Codex 的冻结无标记原图"/></figure>}</div><pre>{current.prompt}</pre></div></details>}
     {sourcePickerOpen&&<SourcePicker state={state} onClose={()=>setSourcePickerOpen(false)}/>}
   </section>;
 }

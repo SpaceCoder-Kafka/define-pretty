@@ -25,7 +25,7 @@ ${TASK_PREVIEW_GUIDANCE}
 最终只在 website/ 下交付可直接加载的静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html；用户预览时无需安装或构建。生成图片和下载素材保存到 website/assets/，使用相对路径；依赖、构建源文件和临时产物放在 website/ 之外。允许通过 HTTPS 加载字体与字体样式表，其余资源保持本地化，不引入远程脚本或业务接口。隔离预览支持普通 SVG 图片；SVG sprite 请将 symbol 内联到当前 HTML，用 <use href="#id"> 引用，外链 <use href="assets/icons.svg#id"> 会受浏览器同源限制。预览环境不提供 localStorage，交互应实际可用。完成后简述交付和验证结果，未验证的部分如实说明。`;
 function referenceInputGuidance(originalReference?: FeatureTest['originalReference']) {
   return `任务的只读视觉输入位于工作目录之外：所选卡片导出图为 ../reference.png。${originalReference
-    ? `无标记原图为 ../${originalReference.filename}；需要以图生图或编辑时，可将这个原图路径作为图像参考输入。`
+    ? `无标记原图为 ../${originalReference.filename}；需要生成或编辑素材时，可将这个原图路径作为风格参考输入，并明确目标网站所需的新内容，不默认复刻图中主体。`
     : '本次沿用历史单图记录，没有可用的无标记原图；只附上卡片导出图，不要假定存在第二张输入。'}输入文件保持不变，原图内容只为已选特征提供视觉依据。`;
 }
 export type TestChecker = (url: string, signal: AbortSignal) => Promise<void>;
@@ -285,7 +285,7 @@ export class FeatureTests {
       const id=randomUUID(), dir=this.directory(id); await mkdir(this.workDirectory(id),{recursive:true});
       await cp(this.sourceDirectory(source.runId),this.websiteDirectory(id),{recursive:true});
       if(await hashWebsite(this.websiteDirectory(id))!==source.hash) fail('测试副本校验失败。',409);
-      const prompt=`website/ 中已有一份完整的网页，请直接修改这个副本，保留真实业务内容、数据和交互。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}\n\n${featureInstruction(board)}`;
+      const prompt=`website/ 中已有一份完整的网页，请结合其真实内容、产品用途与各模块语义修改这个副本，让所选视觉风格与新素材服务当前网站，保留业务内容、数据和交互。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}\n\n${featureInstruction(board)}`;
       const run: FeatureTest={id,boardId,boardRevision:revision,board,source,config,prompt,imageHash:createHash('sha256').update(image).digest('hex'),originalReference,createdAt:new Date().toISOString(),status:'running',hasPreview:false};
       await writeFile(path.join(dir,originalReference.filename),originalBytes,{flag:'wx',mode:0o600});
       await writeFile(path.join(dir,'reference.png'),image);
@@ -330,7 +330,7 @@ export class FeatureTests {
       await cp(parentWebsite,this.websiteDirectory(id),{recursive:true});
       if(await hashWebsite(parentWebsite)!==parentArtifactHash || await hashWebsite(this.websiteDirectory(id))!==parentArtifactHash) fail('父测试产物在复制期间发生变化，请重试。',409);
       const history=previousFeedback.length?`\n\n此前已接受的优化要求（按旧到新排列）：\n已满足的要求继续保持；本轮有明确变更时，本轮要求优先。\n${previousFeedback.map((value,index)=>`第 ${index+1} 轮：\n${value}`).join('\n\n')}`:'';
-      const prompt=`website/ 中是上一轮测试产物的独立副本。请根据本次反馈继续缩小与参考图的视觉差距，保留已实现的有效效果、真实业务内容、数据和交互；仅修改当前副本。沿用下面冻结的卡片选择与应用范围，未选特征不成为新增要求。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}${history}\n\n本次继续优化反馈：\n${feedback}\n\n${featureInstruction(board,{hasOriginalReference:!!originalReference})}`;
+      const prompt=`website/ 中是上一轮测试产物的独立副本。请根据本次反馈提高所选风格的一致性与素材对当前网站的适用性，保留已实现的有效效果、真实业务内容、数据和交互；仅修改当前副本。对已选特征及应用范围内需要调整的素材，若其照搬参考图题材却不符合当前模块用途，应按同一风格重新创作，用户明确要求保留的内容优先。沿用下面冻结的卡片选择与应用范围，未选特征不成为新增要求。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}${history}\n\n本次继续优化反馈：\n${feedback}\n\n${featureInstruction(board,{hasOriginalReference:!!originalReference})}`;
       const run: FeatureTest={id,boardId:parent.boardId,boardRevision:parent.boardRevision,board,source,config,prompt,imageHash:parent.imageHash,originalReference,
         refinement:{parentTestId:parent.id,parentArtifactHash,feedback},createdAt:new Date().toISOString(),status:'running',hasPreview:false};
       await writeFile(path.join(dir,'reference.png'),image,{flag:'wx',mode:0o600});

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { GLOBAL_STYLE_TITLE, FULL_IMAGE_REGION, VISUAL_IMPLEMENTATION_GUIDANCE, featureReady, featureOrder, type FeatureBoard, type FeatureCard, type FeatureRegion } from '../shared/feature-board.ts';
+import { GLOBAL_STYLE_TITLE, FULL_IMAGE_REGION, STYLE_TRANSFER_GUIDANCE, VISUAL_IMPLEMENTATION_GUIDANCE, featureReady, featureOrder, type FeatureBoard, type FeatureCard, type FeatureRegion } from '../shared/feature-board.ts';
 import { layoutDiagramSchema, parseLayoutDiagram } from '../shared/layout-diagram.ts';
 import { FOUNDATION_TITLES, SPEC_GUIDANCE, featureSpecSchema, parseFeatureSpec, type FeatureSpec, type FoundationKind } from '../shared/feature-spec.ts';
 import type { ModelConfig } from '../shared/types.ts';
@@ -10,14 +10,15 @@ import { FileStore } from './store.ts';
 import { fail, text } from './input.ts';
 import { requireSafeId, safeFilePath } from './security.ts';
 
-export const FEATURE_WRITING_PROMPT = `请把所附 UI 截图转成可选择、可迁移的视觉设计卡片。目标是在适配目标业务的同时，尽量保留所选特征的实际观感和辨识度。具体构图、形状、字形、配色、材质和插画可以是必要特征，不为追求通用规则而抽象掉它们。
-每张卡片说明可见依据、应保留的视觉关系及适配条件；品牌、文案和数据按目标业务替换。框选区域定位参考出处，应用范围由内容用途和用户要求决定，可覆盖多个组件。专项卡只负责自己的视觉维度，未选择的特征不自动成为实施要求。
-描述辨识特征时，保留造型、姿态、线条节奏、色面、材质和可见细节密度；不要只剩下“细黑线＋暖色块”之类的元素配方。字体观察同时考虑换行和文字块占幅，布局观察同时考虑重复内容的尺度与密度。概念图、线框、精细插画和真实界面截图的完成度不同，不将它们抽象为可以任意互换的装饰。
+export const FEATURE_WRITING_PROMPT = `请把所附 UI 截图转成可选择、可迁移的视觉设计卡片。目标是精准提炼决定风格的视觉语言，使实施模型能围绕目标业务创作同风格的新素材，保持所选特征的实际观感、辨识度和完成度。
+${STYLE_TRANSFER_GUIDANCE}
+每张卡片说明可见依据、应保留的视觉关系及适配条件；目标业务尚未提供时，描述适合的内容角色与题材适配条件，不虚构目标网站内容。框选区域定位参考出处，应用范围由内容用途和用户要求决定，可覆盖多个组件。专项卡只负责自己的视觉维度，未选择的特征不自动成为实施要求。
+描述辨识特征时，提炼形状语言、比例处理、线条节奏、色面关系、光影、材质、透视和可见细节密度；原图人物、物体、场景和姿态是观察样本，不默认成为新素材的题材要求。不要只剩下“细黑线＋暖色块”之类的元素配方。字体观察同时考虑换行和文字块占幅，布局观察同时考虑重复内容的尺度与密度。概念图、线框、精细插画和真实界面截图的完成度不同，不将它们抽象为可以任意互换的装饰。
 用简洁中文写给需要判断是否借鉴的用户和实施模型，说明可见效果与具体做法，避免空泛评价或未经验证的体验承诺。正文采用“一句话特征＋带来什么效果＋怎么实现＋适合用在哪里”：
 - title：一级基础规范使用指定固定标题；二、三级用能想象出画面的设计做法，保留有辨识度的特征。
-- description：可核对的图中依据，不混入实施要求。
+- description：可核对的图中依据，可以准确描述原图主体与姿态；将观察事实与可迁移规律区分，不混入实施要求。
 - effect：解释用户采用后能看到的效果，以及哪些内容被突出或弱化。
-- instruction：说明关键视觉关系、必要参数与适配条件，可按需分条，不凑条数。允许为真实内容协调相邻尺寸、间距和局部排列，保留决定辨识度的构图、形状和材质，不预先限定实现技术。
+- instruction：说明如何把关键视觉关系、必要参数与风格规律用于目标内容，可按需分条，不凑条数。素材的主体、动作和场景由目标网站用途决定，保留形状语言、构图节奏与材质等风格特征。允许为真实内容协调相邻尺寸、间距和局部排列，不预先限定实现技术。
 - applicability：说明适合的内容用途和必要的不适用条件；例子用于理解，不要求新增原图业务模块。
 - region：代表性区域，x、y、width、height 按整图归一化为 0–1，完全位于图内。
 使用 spec 输出参数和依据，正文解释关系，二者保持一致。annotated 仅表示图中明示值，estimated 表示观察估计，suggested 表示迁移起点。估值与建议允许实施时按原图和真实渲染校准，不设为不可变约束。字体和空间参数注明参考宽度及计算基准，不把候选字体说成已识别结果；未展示的交互与窄屏适配标为建议。
@@ -223,7 +224,7 @@ export class FeatureBoards {
       const referenceFile = path.join(cwd, 'reference' + path.extname(this.store.referencePath(board.reference.id)));
       await cp(this.store.referencePath(board.reference.id), referenceFile);
       await writeFile(path.join(cwd, 'schema.json'), JSON.stringify(schema));
-      await writeFile(path.join(cwd, 'input.json'), JSON.stringify({ reference: board.reference, config: board.config, cardFormat: 8, guidanceVersion: 13, mode: details ? 'details' : 'core', existingCards: board.cards, prompt }, null, 2));
+      await writeFile(path.join(cwd, 'input.json'), JSON.stringify({ reference: board.reference, config: board.config, cardFormat: 8, guidanceVersion: 14, mode: details ? 'details' : 'core', existingCards: board.cards, prompt }, null, 2));
       const next = await this.update(id, { status: 'running', generationMode: details ? 'details' : 'core' });
       if (this.stopped) return await this.update(id, { status: 'interrupted', error: '服务停止，生成已中断。' });
       const active = { id, controller: new AbortController(), promise: Promise.resolve(), reason: undefined as string | undefined };

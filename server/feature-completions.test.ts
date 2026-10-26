@@ -8,6 +8,7 @@ import { FeatureBoards } from './feature-boards.ts';
 import { FeatureCompletions } from './feature-completions.ts';
 import type { Executor } from './codex.ts';
 import type { FeatureSpec } from '../shared/feature-spec.ts';
+import { STYLE_TRANSFER_GUIDANCE } from '../shared/feature-board.ts';
 import { layoutDiagramSchema, parseLayoutDiagram, type LayoutDiagram } from '../shared/layout-diagram.ts';
 
 const config={model:'test',reasoningEffort:'medium',cliVersion:'test'};
@@ -38,6 +39,8 @@ test('completion uses unsaved intent and crop, returns only generated fields, an
     assert.match(prompt, /布局关系的应用范围由内容用途和规则决定/);
     assert.match(prompt, /只借鉴字体、配色或装饰时，不附加整页重排要求/);
     assert.match(prompt, /核对这张卡片的视觉细节，不扩展用户意图/);
+    assert(prompt.includes(STYLE_TRANSFER_GUIDANCE));
+    const input=JSON.parse(await readFile(path.join(f.jobs.directory(job.id),'input.json'),'utf8'));assert.equal(input.guidanceVersion,13);assert.equal(input.prompt,prompt);
     assert(!prompt.includes('不扩大为整页改造'));
     assert.deepEqual(await readFile(path.join(f.boards.directory(f.board.id),'board.json')),before);
     const restarted=new FeatureCompletions(f.boards,f.store);await restarted.initialize();assert.deepEqual((await restarted.get(job.id)).result,result);

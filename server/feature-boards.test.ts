@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT, FEATURE_WRITING_PROMPT, featureSchema } from './feature-boards.ts';
 import { FileStore } from './store.ts';
-import { FULL_IMAGE_REGION, featureReady, featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
+import { FULL_IMAGE_REGION, STYLE_TRANSFER_GUIDANCE, featureReady, featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
 import type { Executor } from './codex.ts';
 import { parseLayoutDiagram } from '../shared/layout-diagram.ts';
 
@@ -77,7 +77,8 @@ test('real generation contract snapshots input and keeps old cards when starting
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
     const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 4); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
-    assert.equal(input.cardFormat, 8); assert.equal(input.guidanceVersion, 13);
+    assert.equal(input.cardFormat, 8); assert.equal(input.guidanceVersion, 14);
+    assert(observedPrompt.includes(STYLE_TRANSFER_GUIDANCE));
     const schema = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'schema.json'), 'utf8'));
     assert.deepEqual(schema.properties.cards.items.properties.tier.enum, ['foundation', 'signature']);
     assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
@@ -284,7 +285,7 @@ test('detail discovery snapshots existing cards, preserves choices, and excludes
     const result=await f.boards.get(next.id);assert.deepEqual(result.cards[0],parent.cards[0]);assert.deepEqual(await f.boards.get(parent.id),parent);
     assert.equal(result.cards[1].discovery,'detail');assert.equal(result.cards[1].selected,false);assert.equal(result.addedDetails,1);
     assert(prompt.includes(parent.cards[0].instruction));assert(!featureInstruction(result).includes('DETAIL-ONLY-RULE'));
-    const input=JSON.parse(await readFile(path.join(f.boards.directory(next.id),'input.json'),'utf8'));assert.equal(input.prompt,prompt);assert.deepEqual(input.existingCards,parent.cards);
+    const input=JSON.parse(await readFile(path.join(f.boards.directory(next.id),'input.json'),'utf8'));assert.equal(input.prompt,prompt);assert.deepEqual(input.existingCards,parent.cards);assert(prompt.includes(STYLE_TRANSFER_GUIDANCE));
     result.cards[1].selected=true;
     const saved=await f.boards.edit(result.id,{revision:result.revision,title:result.title,cards:result.cards});
     assert(featureInstruction(saved).includes('DETAIL-ONLY-RULE'));assert.equal(saved.cards[1].discovery,'detail');
