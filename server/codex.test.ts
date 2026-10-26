@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { setTimeout as pause } from 'node:timers/promises';
 import { executeCodex, type ExecutionOptions } from './codex.ts';
+import { readExecutionProgress } from './execution-progress.ts';
 async function waitUntil(predicate: () => boolean | Promise<boolean>): Promise<void> {
   for (let i = 0; i < 100; i++) { if (await predicate()) return; await pause(10); }
   throw new Error('Timed out waiting for test condition');
@@ -48,6 +49,46 @@ setTimeout(() => {
     assert.equal(result.error, undefined);
     assert.equal(result.summary, '中文完成');
     assert.equal(result.usage?.input_tokens, 42);
+    const progress = await readExecutionProgress(options.cwd);
+    assert.equal(progress?.activeActions.length, 0);
+    assert.equal(progress?.message, '生成执行已结束，准备检查网页');
+  });
+});
+
+test('website subagents are an explicit per-task opt-in with three concurrent workers', async () => {
+  await fakeCli(`process.stdin.resume();`, async (directory, options) => {
+    await executeCodex({ ...options, parallelAgents: true });
+    let { args } = JSON.parse(await readFile(path.join(directory, 'command.json'), 'utf8')) as { args: string[] };
+    assert(args.includes('multi_agent'));
+    assert(args.includes('agents.enabled=true'));
+    assert(args.includes('agents.max_concurrent_threads_per_session=3'));
+    assert(!args.some(arg => arg.includes('max_depth')));
+    await executeCodex({ ...options, readOnly: true });
+    ({ args } = JSON.parse(await readFile(path.join(directory, 'command.json'), 'utf8')));
+    assert(!args.includes('multi_agent'));
+    assert(!args.some(arg => arg.startsWith('agents.')));
+  });
+});
+
+test('CLI publishes bounded live progress before process completion and tolerates malformed lines', async () => {
+  await fakeCli(`
+process.stdout.write('non-json diagnostic\\n');
+process.stdout.write(JSON.stringify({type:'item.completed',item:{id:'private',type:'reasoning',text:'private reasoning'}})+'\\n');
+const event=JSON.stringify({type:'item.started',item:{id:'cmd',type:'command_execution',command:'apply_patch PRIVATE_TOKEN=secret'}})+'\\n';
+process.stdout.write(event.slice(0,20));
+setTimeout(()=>process.stdout.write(event.slice(20)),10);
+setTimeout(()=>{process.stdout.write(JSON.stringify({type:'item.completed',item:{id:'cmd',type:'command_execution',exit_code:1,aggregated_output:'private'}})+'\\n');},400);
+`, async (directory, options) => {
+    const running = executeCodex(options);
+    await waitUntil(async () => (await readExecutionProgress(directory))?.activeActions.length === 1);
+    const live = await readExecutionProgress(directory);
+    assert.equal(live?.activeActions[0].label, '写入网页文件');
+    assert(!JSON.stringify(live).includes('PRIVATE_TOKEN'));
+    assert(!JSON.stringify(live).includes('private reasoning'));
+    await running;
+    const final = await readExecutionProgress(directory);
+    assert.equal(final?.failedActions, 1);
+    assert.equal(final?.activeActions.length, 0);
   });
 });
 

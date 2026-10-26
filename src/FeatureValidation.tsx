@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Maximize2, FlaskConical, LoaderCircle, Check, LayoutGrid, X } from 'lucide-react';
+import { Maximize2, FlaskConical, LoaderCircle, Check, LayoutGrid, X, RefreshCw } from 'lucide-react';
 import type { FeatureBoard } from '../shared/feature-board';
 import { selectedFeatures } from '../shared/feature-board';
 import type { FeatureTest, FeatureTestSource, FeatureSourceRun } from '../shared/feature-test';
 import type { Bootstrap, ModelConfig } from '../shared/types';
+import type { DraftPreview, ExecutionProgress } from '../shared/execution-progress';
 import { api, errorMessage } from './api';
 import { exportFeatureBoard } from './feature-export';
 import FullscreenPreview from './FullscreenPreview';
@@ -91,10 +92,51 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
   return {sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,refine,refinementUsesSavedInput,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
 }
 type State=ReturnType<typeof useFeatureTests>;
-function Website({name,url,empty,actions}: {name:string;url?:string;empty:string;actions?:ReactNode}) {
+type ProgressRun = { id:string; status:string; createdAt:string; finishedAt?:string; elapsedMs?:number; progress?:ExecutionProgress; draftPreview?:DraftPreview };
+function duration(milliseconds:number) {
+  const seconds=Math.max(0,Math.floor(milliseconds/1000));
+  return seconds<60?`${seconds} 秒`:`${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;
+}
+function RunProgress({run}: {run:ProgressRun}) {
+  const active=isActive(run), [now,setNow]=useState(Date.now);
+  useEffect(()=>{
+    setNow(Date.now());
+    if(!active)return;
+    const timer=setInterval(()=>setNow(Date.now()),1000);
+    return ()=>clearInterval(timer);
+  },[run.id,active]);
+  const progress=run.progress;
+  const end=active?now:Date.parse(run.finishedAt || '') || Date.parse(progress?.updatedAt || '') || Date.parse(run.createdAt);
+  const elapsed=!active&&run.elapsedMs!==undefined?run.elapsedMs:end-Date.parse(run.createdAt);
+  const activityAge=progress?Math.max(0,now-Date.parse(progress.updatedAt)):0;
+  const activeAgents=progress?.agents.filter(agent=>agent.status==='running').length || 0;
+  const agentLabels={running:'进行中',completed:'已完成',failed:'失败',closed:'已结束'};
+  return <div className="feature-run-progress">
+    <div className="feature-run-progress-meta"><span>{active?'已用时':'耗时'} <strong>{duration(elapsed)}</strong></span>{progress&&<><span>已完成 {progress.completedActions} 步</span>{progress.failedActions>0&&<span className="feature-run-retries">失败尝试 {progress.failedActions} 次</span>}{progress.agents.length>0&&<span>{activeAgents>0?`${activeAgents} 个子代理进行中`:`${progress.agents.length} 个子代理参与`}</span>}</>}</div>
+    {active&&progress?.message&&<p className="feature-run-message" role="status">{run.status==='checking'?'正在检查网页加载':progress.message}</p>}
+    {active&&progress&&<p className={`feature-run-activity${activityAge>=120000?' is-quiet':''}`}>{activityAge>=120000?`${duration(activityAge)} 没有新活动，可能仍在处理。`:`最近活动：${activityAge<1000?'刚刚':`${duration(activityAge)}前`}`}</p>}
+    {active&&!progress&&<p className="feature-run-activity">正在执行，尚无可显示的活动记录。</p>}
+    {active&&!!progress?.activeActions.length&&<ul className="feature-run-actions">{progress.activeActions.map(action=><li key={action.id}><LoaderCircle className="spin" size={12}/><span>{action.label}</span><small>{duration(now-Date.parse(action.startedAt))}</small></li>)}</ul>}
+    {!!progress?.agents.length&&<div className="feature-run-agents" aria-label="子代理任务">{progress.agents.map(agent=><span key={agent.id} className={`feature-run-agent is-${agent.status}`}><i aria-hidden="true"/>{agent.label} · {agentLabels[agent.status]}</span>)}</div>}
+  </div>;
+}
+function Website({name,url,empty,actions,note}: {name:string;url?:string;empty:string;actions?:ReactNode;note?:string}) {
   const box=useRef<HTMLDivElement>(null), [scale,setScale]=useState(.4), [fullscreen,setFullscreen]=useState(false);
   useEffect(()=>{if(!box.current)return;const observer=new ResizeObserver(([entry])=>setScale(entry.contentRect.width/1440));observer.observe(box.current);return()=>observer.disconnect();},[]);
-  return <article className="feature-test-page"><header><strong>{name}</strong><div className="feature-test-page-actions">{actions}<button className="feature-icon" aria-label={`全屏查看${name}`} disabled={!url} onClick={()=>setFullscreen(true)}><Maximize2 size={16}/></button></div></header><div ref={box} className="feature-test-viewport" style={{height:1000*scale}}>{url?<iframe title={name} src={url} sandbox="allow-scripts" referrerPolicy="no-referrer" style={{transform:`scale(${scale})`}}/>:<p>{empty}</p>}</div>{fullscreen&&url&&<FullscreenPreview name={name} url={url} onClose={()=>setFullscreen(false)}/>}</article>;
+  return <article className="feature-test-page"><header><div className="feature-test-page-title"><strong>{name}</strong>{note&&<span>{note}</span>}</div><div className="feature-test-page-actions">{actions}<button className="feature-icon" aria-label={`全屏查看${name}`} disabled={!url} onClick={()=>setFullscreen(true)}><Maximize2 size={16}/></button></div></header><div ref={box} className="feature-test-viewport" style={{height:1000*scale}}>{url?<iframe title={name} src={url} sandbox="allow-scripts" referrerPolicy="no-referrer" style={{transform:`scale(${scale})`}}/>:<p>{empty}</p>}</div>{fullscreen&&url&&<FullscreenPreview name={name} url={url} onClose={()=>setFullscreen(false)}/>}</article>;
+}
+function GeneratedWebsite({run,name,baseUrl,finalReady,empty}: {run?:ProgressRun;name:string;baseUrl?:string;finalReady:boolean;empty:string}) {
+  const [viewedDraft,setViewedDraft]=useState<{id:string;version?:string}>();
+  const latest=run?.draftPreview?.updatedAt;
+  useEffect(()=>{
+    if(!run){setViewedDraft(undefined);return;}
+    setViewedDraft(previous=>previous?.id===run.id&&previous.version?previous:{id:run.id,version:latest});
+  },[run?.id,latest]);
+  const version=viewedDraft?.id===run?.id?viewedDraft?.version || latest:latest;
+  const draft=!finalReady&&!!latest;
+  const url=baseUrl&&(finalReady?`${baseUrl}?revision=${encodeURIComponent(run?.finishedAt || run?.status || 'final')}`:draft?`${baseUrl}?revision=${encodeURIComponent(version || '')}`:undefined);
+  const newer=!!latest&&latest!==version;
+  return <Website name={name} url={url} empty={empty} note={draft?isActive(run)?'阶段预览 · 仍在生成':'阶段预览 · 未完成验收':undefined} actions={draft&&<button className="feature-button" onClick={()=>{if(run)setViewedDraft({id:run.id,version:latest});}} disabled={!newer} aria-label={`刷新${name}阶段预览`}><RefreshCw size={13}/>{newer?'查看更新':'已是最新预览'}</button>}/>;
 }
 
 function BuiltinSourceCard({source,origin,selected,disabled,onChoose,onPreview}: {source:FeatureTestSource;origin:string;selected:boolean;disabled:boolean;onChoose:()=>void;onPreview:()=>void}) {
@@ -124,6 +166,7 @@ function SourcePicker({state,onClose}: {state:State;onClose:()=>void}) {
   const customSource=useRef<HTMLDetailsElement>(null);
   const [previewSource,setPreviewSource]=useState<FeatureTestSource>();
   const {source,config}=state;
+  const sourceJob=state.sourceRuns[0];
   const builtins=state.sources.filter(s=>s.builtin).sort((a,b)=>a.builtin!.order-b.builtin!.order);
   const personal=state.sources.filter(s=>!s.builtin);
   useEffect(()=>{
@@ -158,8 +201,9 @@ function SourcePicker({state,onClose}: {state:State;onClose:()=>void}) {
           <textarea id="source-requirements" rows={3} maxLength={12000} value={state.requirements} onChange={e=>state.setRequirements(e.target.value)} placeholder="例如：生成一个中文个人博客，包含作者介绍、文章列表、分类筛选和文章详情；或制作一个产品设计师的个人简历页。"/>
           {config&&<div className="feature-test-controls"><label>生成模型<input value={config.model} disabled={state.busy||state.running} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy||state.running} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>与测试模型共用设置</span></div>}
           <div className="feature-source-actions"><button className="feature-button primary" disabled={!state.requirements.trim()||state.busy||state.running||!state.authenticated||!config} onClick={()=>void state.generateSource()}>{state.sourceRunning?<LoaderCircle className="spin" size={16}/>:null}{state.sourceRunning?'原网页生成中…':'生成原始网页'}</button><span>最长 30 分钟 · 关闭弹窗后继续生成</span></div>
-          {state.sourceRuns[0]&&<div className="feature-source-job" role="status"><span>{isActive(state.sourceRuns[0])?'原网页生成中':labels[state.sourceRuns[0].status]} · {state.sourceRuns[0].requirements.slice(0,60)}{state.sourceRuns[0].error&&`：${state.sourceRuns[0].error}`}</span>{isActive(state.sourceRuns[0])&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancelSource(state.sourceRuns[0].id)}>取消生成</button>}</div>}
-          <ImplementationSummary summary={state.sourceRuns[0]?.summary}/>
+          {sourceJob&&<><div className="feature-source-job" role="status"><span>{isActive(sourceJob)?'原网页生成中':labels[sourceJob.status]} · {sourceJob.requirements.slice(0,60)}{sourceJob.error&&`：${sourceJob.error}`}</span>{isActive(sourceJob)&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancelSource(sourceJob.id)}>取消生成</button>}</div><RunProgress run={sourceJob}/></>}
+          {sourceJob?.draftPreview&&<GeneratedWebsite run={sourceJob} name={isActive(sourceJob)?'生成中的原网页':'生成的原网页'} baseUrl={`${state.origin}/feature-tests/source-runs/${sourceJob.id}/index.html`} finalReady={['checking','completed'].includes(sourceJob.status)} empty="首个可预览版本完成后会显示在这里。"/>}
+          <ImplementationSummary summary={sourceJob?.summary}/>
           {state.sourceRuns.length>0&&<details><summary>原网页生成历史（{state.sourceRuns.length}）</summary>{state.sourceRuns.map(r=><div key={r.id}><div className="feature-source-job"><span>{new Date(r.createdAt).toLocaleString('zh-CN')} · {isActive(r)?'生成中':labels[r.status]} · {r.requirements.slice(0,100)}{r.error&&`：${r.error}`}</span>{r.status==='completed'&&<button className="feature-button" disabled={state.busy||state.running} onClick={()=>chooseSource(r.id)}>使用此页</button>}</div><ImplementationSummary summary={r.summary}/></div>)}</details>}
         </div>
       </details>
@@ -183,11 +227,12 @@ export default function FeatureValidation({state}: {state:State}) {
     {state.runs.length>0&&<label className="feature-test-history">测试历史<select value={state.selectedId} onChange={e=>state.setSelectedId(e.target.value)}><option value="">当前原网页 · 尚未选择测试结果</option>{state.runs.map((r,i)=><option key={r.id} value={r.id}>第 {state.runs.length-i} 次 · {new Date(r.createdAt).toLocaleTimeString('zh-CN')} · {labels[r.status]}</option>)}</select></label>}</div>
     {state.error&&<div className="feature-alert" role="alert">{state.error}</div>}
     {current&&<div className="feature-test-state"><div>{isActive(current)&&<LoaderCircle className="spin" size={16}/>}<strong>{labels[current.status]}</strong><span>{current.config.model} · {current.config.reasoningEffort} · {selectedFeatures(current.board).map(c=>c.title).join(' / ')}</span></div>{isActive(current)&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancel()}>取消测试</button>}</div>}
+    {current&&<RunProgress run={current}/>}
     {current?.error&&<div className="feature-alert">{current.error}{current.hasPreview?' 已保留网页结果供查看。':''}</div>}
     <ImplementationSummary summary={current?.summary}/>
     {current?.refinement&&<div className="feature-refinement-history"><strong>{parentIndex>=0?`基于第 ${state.runs.length-parentIndex} 次结果继续优化`:'基于历史结果继续优化'}</strong><p>{current.refinement.feedback}</p></div>}
     {current?.status==='completed'&&current.changed===false&&<p className="feature-test-source">本次网页文件与原网页一致，未产生修改。</p>}
-    <div className="feature-test-pair"><Website name="原始网页" url={original?`${state.origin}/feature-tests/sources/${original.runId}/index.html`:undefined} empty="点击「更换网页」选择内置场景，或自定义生成网页。" actions={<button className="feature-button" aria-haspopup="dialog" onClick={()=>setSourcePickerOpen(true)}>{state.sourceRunning?<LoaderCircle className="spin" size={14}/>:<LayoutGrid size={14}/>} {state.sourceRunning?'查看生成进度':'更换网页'}</button>}/><Website name="优化后的网页" url={current?.hasPreview?`${state.origin}/feature-tests/runs/${current.id}/index.html`:undefined} empty={isActive(current)?'Codex 正在根据所选卡片修改网页…':'勾选卡片后，点击底部「测试所选设计」。'}/></div>
+    <div className="feature-test-pair"><Website name="原始网页" url={original?`${state.origin}/feature-tests/sources/${original.runId}/index.html`:undefined} empty="点击「更换网页」选择内置场景，或自定义生成网页。" actions={<button className="feature-button" aria-haspopup="dialog" onClick={()=>setSourcePickerOpen(true)}>{state.sourceRunning?<LoaderCircle className="spin" size={14}/>:<LayoutGrid size={14}/>} {state.sourceRunning?'查看生成进度':'更换网页'}</button>}/><GeneratedWebsite run={current} name="优化后的网页" baseUrl={current?`${state.origin}/feature-tests/runs/${current.id}/index.html`:undefined} finalReady={!!current?.hasPreview} empty={isActive(current)?'Codex 正在根据所选卡片修改网页，首个阶段预览完成后会显示在这里。':'勾选卡片后，点击底部「测试所选设计」。'}/></div>
     {current?.hasPreview&&!isActive(current)&&<div className="feature-refinement">
       <label htmlFor={feedbackId}>希望继续改进什么</label>
       <p>继续修改此结果，沿用它保存的卡片选择、参考图和原网页，每轮结果都会保留。</p>

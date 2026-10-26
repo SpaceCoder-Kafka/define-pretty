@@ -758,3 +758,69 @@ test('refinement rejects cycles, missing history and unsafe ancestor IDs instead
     assert.equal((await f.tests.list()).length,2);
   } finally {await f.cleanup();}
 });
+
+test('rendered drafts are previewable during execution and after cancellation without final acceptance', async () => {
+  let entered = false;
+  const f = await fixture(async options => {
+    assert.equal(options.parallelAgents, true);
+    assert.match(options.prompt, /子代理并行处理独立任务/);
+    entered = true;
+    await new Promise<void>(resolve => options.signal.addEventListener('abort', () => resolve(), { once: true }));
+    return { exitCode: 1 };
+  }, 10_000);
+  const server = createServer(createPreviewApp(4193, f.tests));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${(server.address() as {port:number}).port}`;
+  try {
+    const run = await f.tests.start(f.board.id, f.board.revision, png, config);
+    await done(async () => entered);
+    const url = `${origin}/feature-tests/runs/${run.id}/index.html`;
+    assert.equal((await fetch(url)).status, 404, 'the copied baseline is not a generated draft');
+    const cwd = f.tests.workDirectory(run.id);
+    await writeFile(path.join(cwd, 'website/index.html'), '<h1>Stage draft</h1>');
+    await writeFile(path.join(cwd, 'draft-preview.json'), JSON.stringify({ updatedAt: new Date().toISOString() }));
+    const active = await f.tests.get(run.id);
+    assert.equal(active.status, 'running');
+    assert.equal(active.hasPreview, false);
+    assert(active.draftPreview);
+    const response = await fetch(url);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-security-policy') || '', /sandbox allow-scripts/);
+    assert.equal(await response.text(), '<h1>Stage draft</h1>');
+    await assert.rejects(f.tests.refine(run.id, 'Continue', config));
+    const stopped = await f.tests.cancel(run.id);
+    assert.equal(stopped.status, 'cancelled');
+    assert.equal(stopped.hasPreview, false);
+    assert(stopped.draftPreview);
+    assert.equal((await fetch(url)).status, 200);
+    await writeFile(path.join(cwd, 'private.txt'), 'private');
+    await symlink(path.join(cwd, 'private.txt'), path.join(cwd, 'website/escape.txt'));
+    assert.equal((await fetch(url)).status, 404);
+    assert.equal((await fetch(`${origin}/feature-tests/runs/${run.id}/..%2Fprivate.txt`)).status, 404);
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    await f.cleanup();
+  }
+});
+
+test('source drafts stay out of selectable sources until final success', async () => {
+  let entered = false;
+  const f = await fixture(async options => {
+    assert.equal(options.parallelAgents, true);
+    await writeFile(path.join(options.cwd, 'website/index.html'), '<h1>Source draft</h1>');
+    await writeFile(path.join(options.cwd, 'draft-preview.json'), JSON.stringify({ updatedAt: new Date().toISOString() }));
+    entered = true;
+    await new Promise<void>(resolve => options.signal.addEventListener('abort', () => resolve(), { once: true }));
+    return { exitCode: 1 };
+  }, 10_000);
+  try {
+    const run = await f.tests.generateSource('A source draft', config);
+    await done(async () => entered);
+    assert((await f.tests.getSourceRun(run.id)).draftPreview);
+    assert(!(await f.tests.listSources()).some(source => source.runId === run.id));
+    const stopped = await f.tests.cancelSource(run.id);
+    assert.equal(stopped.status, 'cancelled');
+    assert(stopped.draftPreview);
+    assert(!(await f.tests.listSources()).some(source => source.runId === run.id));
+  } finally { await f.cleanup(); }
+});

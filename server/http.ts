@@ -123,8 +123,8 @@ export function createPreviewApp(consolePort: number, featureTests?: FeatureTest
     if(!featureTests) fail('验证区域尚未启用。',404);
     const id=requireSafeId(req.params[1]); let directory: string;
     if(req.params[0]==='sources') { await featureTests!.getSourceById(id); directory=featureTests!.sourceDirectory(id); }
-    else if(req.params[0]==='source-runs') { const run=await featureTests!.getSourceRun(id); if(!['checking','completed'].includes(run.status)) fail('原网页尚未就绪。',404); directory=featureTests!.sourceRunWebsite(id); }
-    else { const run=await featureTests!.get(id); if(!run.hasPreview || ['queued','running'].includes(run.status)) fail('测试网页尚未就绪。',404); directory=featureTests!.websiteDirectory(id); }
+    else if(req.params[0]==='source-runs') { const run=await featureTests!.getSourceRun(id); if(!['checking','completed'].includes(run.status) && !run.draftPreview) fail('原网页尚未就绪。',404); directory=featureTests!.sourceRunWebsite(id); }
+    else { const run=await featureTests!.get(id); if(!run.hasPreview && !run.draftPreview) fail('测试网页尚未就绪。',404); directory=featureTests!.websiteDirectory(id); }
     const file = await safeFilePath(directory,req.params[2] || 'index.html');
     // Sandboxed previews have an opaque origin; ES modules still require CORS.
     res.setHeader('Access-Control-Allow-Origin','*');

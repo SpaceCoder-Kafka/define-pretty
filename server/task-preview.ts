@@ -1,13 +1,26 @@
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { chromium, type Browser } from 'playwright';
 import { previewHeaders, safeFilePath } from './security.ts';
 import { chromeExecutable, inspectWebsite } from './validation.ts';
+import type { DraftPreview } from '../shared/execution-progress.ts';
 
-export const TASK_PREVIEW_GUIDANCE = `可自主运行 node preview.mjs [width] [height] 检查当前 website/index.html（默认 1440×1000，宽 320–2560、高 240–2000）。该命令使用与正式预览相同的隔离策略，保存 preview.png 和 preview.json 到当前任务目录；JSON 包含加载错误、图片状态、标题实际字号与尺寸及横向溢出信息。截图保留整页，过长页面会截断并在 JSON 中说明。可用读图工具查看截图，对照参考图后自主修改并再次检查；加载无报错不代表视觉还原完成。`;
+export const TASK_PREVIEW_GUIDANCE = `可自主运行 node preview.mjs [width] [height] 检查当前 website/index.html（默认 1440×1000，宽 320–2560、高 240–2000）。该命令使用与正式预览相同的隔离策略，保存 preview.png 和 preview.json 到当前任务目录，并向工作台开放当前草稿供用户查看；JSON 包含加载错误、图片状态、标题实际字号与尺寸及横向溢出信息。截图保留整页，过长页面会截断并在 JSON 中说明。可用读图工具查看截图，对照参考图后自主修改并再次检查；加载无报错不代表视觉还原完成。主代理统一执行截图，避免多个子代理争用同一截图入口。`;
+
+/** A captured draft is viewable, but neither immutable nor accepted as the final result. */
+export async function readDraftPreview(cwd: string): Promise<DraftPreview | undefined> {
+  try {
+    const value = JSON.parse(await readFile(await safeFilePath(cwd, 'draft-preview.json'), 'utf8'));
+    if (typeof value.updatedAt !== 'string' || !Number.isFinite(Date.parse(value.updatedAt))) return;
+    const website = path.join(cwd, 'website');
+    await safeFilePath(website, 'index.html');
+    await inspectWebsite(website);
+    return { updatedAt: value.updatedAt };
+  } catch { return undefined; }
+}
 
 type PreviewOptions = { cwd: string; signal?: AbortSignal; captureTimeoutMs?: number };
 type PreviewHandle = { instruction: string; close: () => Promise<void> };
@@ -111,6 +124,19 @@ export async function startTaskPreview({ cwd, signal, captureTimeoutMs = CAPTURE
       });
       fontErrors.forEach(record);
       await page.waitForTimeout(200);
+      // Off-screen lazy images must be requested before a full-page screenshot.
+      // Wait concurrently with one shared deadline, without changing delivered HTML.
+      await page.evaluate(async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const images = [...document.images];
+        images.forEach(image => { image.loading = 'eager'; });
+        try {
+          await Promise.race([
+            Promise.all(images.map(image => image.decode().catch(() => undefined))),
+            new Promise(resolve => { timer = setTimeout(resolve, 5000); }),
+          ]);
+        } finally { clearTimeout(timer); }
+      });
       const metrics = await page.evaluate(() => {
         const root = document.documentElement;
         return {
@@ -158,7 +184,15 @@ export async function startTaskPreview({ cwd, signal, captureTimeoutMs = CAPTURE
     }
     if (!closed) {
       if (failure) res.status(timedOut ? 504 : 422).json({ error: failure.message });
-      else res.json(result);
+      else {
+        // A separate atomic sidecar avoids racing terminal run.json writes.
+        // Captures with diagnostics are drafts too; this never marks a run complete.
+        const checkpoint = path.join(cwd, 'draft-preview.json');
+        const temporary = `${checkpoint}.${randomBytes(8).toString('hex')}.tmp`;
+        await writeFile(temporary, JSON.stringify({ updatedAt: new Date().toISOString() }), { flag: 'wx', mode: 0o600 });
+        await rename(temporary, checkpoint);
+        res.json(result);
+      }
     }
   });
 

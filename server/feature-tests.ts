@@ -12,9 +12,15 @@ import { detectImageType, requireSafeId, safeFilePath } from './security.ts';
 import { fail, text } from './input.ts';
 import { builtinWebsiteRoot, freezeBuiltinSources } from './builtin-sources.ts';
 import { startTaskPreview, TASK_PREVIEW_GUIDANCE } from './task-preview.ts';
+import { readExecutionProgress } from './execution-progress.ts';
+import { readDraftPreview } from './task-preview.ts';
 
 const activeStatus = (status: string) => ['queued','running','checking'].includes(status);
 const WEBSITE_WORKFLOW = `生成期间可联网查找或下载素材、安装依赖、构建和启动临时预览，并按实际截图自主对照、修正。浏览器连接器不可用时，可使用命令行无头浏览器等可用方式继续验证。
+允许并鼓励使用子代理并行处理独立任务，例如插画与素材、字体与资源准备、局部组件、只读验收。按实际任务决定是否拆分，最多同时使用 3 个子代理；主代理继续推进可独立完成的页面工作。明确每个子代理负责的文件与产物路径，共享设计方向和参考图位置，告知它们其他代理也在工作，不覆盖别人的修改；有依赖或共同编辑同一文件的步骤由主代理协调。主代理负责合并、整页视觉一致性与最终验收；合并前等待相关产物完成。所有代理沿用本次模型和推理强度。
+先检查已有 website/assets/、可用依赖和字体工具，适合时直接复用，避免重复下载或安装；确有缺少才准备依赖。不要让独立的素材下载、生图阻塞页面结构实现。尽早将完整页面写入 website/ 并运行 node preview.mjs，提供阶段预览，再合并素材和完善细节。阶段预览不代表最终验收通过。
+分文件、分批保存实现，避免一次生成巨大脚本后才尝试落盘。使用 apply_patch 时必须包含 *** Begin Patch 与 *** End Patch；写入后立即确认文件存在。遇到写入或工具错误，先用最小命令修复调用方式，再复用已有内容继续，不要原样重试或整段重新生成。只对当前文件范围执行必要的读取。
+首轮截图后优先修正最影响观感的具体差异并检查窄屏与关键交互；后续复查以尚未解决的问题为依据，已验证通过的内容不重复检查，除非后续修改影响它。出现等待、失败重试或阶段切换时，用简短进度说明已完成和正在处理的内容。交付时如实列出残余差距，保留视觉质量目标，不以耗时预算替代验收。
 ${TASK_PREVIEW_GUIDANCE}
 最终只在 website/ 下交付可直接加载的静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html；用户预览时无需安装或构建。生成图片和下载素材保存到 website/assets/，使用相对路径；依赖、构建源文件和临时产物放在 website/ 之外。允许通过 HTTPS 加载字体与字体样式表，其余资源保持本地化，不引入远程脚本或业务接口。隔离预览支持普通 SVG 图片；SVG sprite 请将 symbol 内联到当前 HTML，用 <use href="#id"> 引用，外链 <use href="assets/icons.svg#id"> 会受浏览器同源限制。预览环境不提供 localStorage，交互应实际可用。完成后简述交付和验证结果，未验证的部分如实说明。`;
 function referenceInputGuidance(originalReference?: FeatureTest['originalReference']) {
@@ -88,7 +94,7 @@ export class FeatureTests {
   }
   private async executeWebsite(options: ExecutionOptions) {
     const preview = await startTaskPreview({ cwd: options.cwd, signal: options.signal });
-    try { return await this.executor(options); }
+    try { return await this.executor({ ...options, parallelAgents: true }); }
     finally { await preview.close(); }
   }
   directory(id: string) { return path.join(this.root, 'runs', requireSafeId(id)); }
@@ -96,7 +102,20 @@ export class FeatureTests {
   websiteDirectory(id: string) { return path.join(this.workDirectory(id),'website'); }
   sourceDirectory(id: string) { return path.join(this.root, 'sources', requireSafeId(id), 'website'); }
   private async persist(run: FeatureTest) { const dir = this.directory(run.id); await mkdir(dir, { recursive: true }); const tmp = path.join(dir, 'run.json.tmp'); await writeFile(tmp, JSON.stringify(run,null,2), { mode: 0o600 }); await rename(tmp,path.join(dir,'run.json')); }
-  async get(id: string): Promise<FeatureTest> { return JSON.parse(await readFile(path.join(this.directory(id),'run.json'),'utf8')); }
+  private async withActivity<T extends FeatureTest | FeatureSourceRun>(run: T, cwd: string): Promise<T> {
+    const [progress, draftPreview] = await Promise.all([readExecutionProgress(cwd), readDraftPreview(cwd)]);
+    if (progress) {
+      if (!activeStatus(run.status)) {
+        progress.activeActions = [];
+        progress.agents = progress.agents.map(agent => agent.status === 'running' ? { ...agent, status: 'closed' } : agent);
+      }
+      run.progress = progress;
+    }
+    if (draftPreview) run.draftPreview = draftPreview;
+    else delete run.draftPreview;
+    return run;
+  }
+  async get(id: string): Promise<FeatureTest> { return this.withActivity(JSON.parse(await readFile(path.join(this.directory(id),'run.json'),'utf8')), this.workDirectory(id)); }
   async originalReferenceFile(id: string): Promise<{ file: string; mimeType: string }> {
     const run = await this.get(id), reference = run.originalReference;
     if (!reference) fail('该历史测试未保存原始参考图。',404);
@@ -158,7 +177,7 @@ export class FeatureTests {
     await writeFile(path.join(dir,'run.json.tmp'),JSON.stringify(run,null,2),{mode:0o600});
     await rename(path.join(dir,'run.json.tmp'),path.join(dir,'run.json'));
   }
-  async getSourceRun(id: string): Promise<FeatureSourceRun> { return JSON.parse(await readFile(path.join(this.sourceRunDirectory(id),'run.json'),'utf8')); }
+  async getSourceRun(id: string): Promise<FeatureSourceRun> { return this.withActivity(JSON.parse(await readFile(path.join(this.sourceRunDirectory(id),'run.json'),'utf8')), this.sourceWorkDirectory(id)); }
   async listSourceRuns(): Promise<FeatureSourceRun[]> {
     const entries=await readdir(path.join(this.root,'source-runs'),{withFileTypes:true});
     const runs=await Promise.all(entries.filter(e=>e.isDirectory()).map(async e=>{try{return await this.getSourceRun(e.name);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}}));

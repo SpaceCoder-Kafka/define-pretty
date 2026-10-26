@@ -7,6 +7,7 @@ import { finished } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import type { ModelConfig, Usage } from '../shared/types.ts';
 import { inspectWebsite } from './validation.ts';
+import { ExecutionProgressTracker, ExecutionProgressWriter } from './execution-progress.ts';
 export interface ExecutionOptions {
   run: { id: string };
   cwd: string;
@@ -17,6 +18,7 @@ export interface ExecutionOptions {
   signal: AbortSignal;
   outputSchema?: string;
   readOnly?: boolean;
+  parallelAgents?: boolean;
 }
 export interface ExecutionResult { exitCode: number | null; usage?: Usage; summary?: string; error?: string }
 export type Executor = (options: ExecutionOptions) => Promise<ExecutionResult>;
@@ -58,6 +60,7 @@ export const executeCodex: Executor = async options => {
   // Generation can fetch assets and build dependencies inside its isolated work directory.
   // This does not change the network policy of the finished page's preview.
   if (!options.readOnly) args.push('-c', 'sandbox_workspace_write.network_access=true');
+  if (options.parallelAgents) args.push('--enable', 'multi_agent', '-c', 'agents.enabled=true', '-c', 'agents.max_concurrent_threads_per_session=3');
   if (options.config.provider) args.push('-c', `model_provider=${JSON.stringify(options.config.provider)}`);
   if (options.outputSchema) args.push('--output-schema', options.outputSchema);
   for (const file of options.referenceFiles ?? (options.referenceFile ? [options.referenceFile] : [])) args.push('--image', file);
@@ -66,6 +69,10 @@ export const executeCodex: Executor = async options => {
   const events = createWriteStream(path.join(options.cwd, 'events.jsonl'), { flags: 'a' });
   const errors = createWriteStream(path.join(options.cwd, 'stderr.log'), { flags: 'a' });
   const child = spawn('codex', args, { cwd: options.cwd, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
+  const progress = new ExecutionProgressTracker();
+  const progressWriter = new ExecutionProgressWriter(options.cwd);
+  progressWriter.schedule(progress.snapshot());
+  let outcome: 'completed' | 'failed' | 'cancelled' = 'failed';
   let buffer = '';
   let usage: Usage | undefined;
   let summary: string | undefined;
@@ -74,6 +81,7 @@ export const executeCodex: Executor = async options => {
   const parseLine = (line: string) => {
     try {
       const event = JSON.parse(line);
+      if (progress.accept(event)) progressWriter.schedule(progress.snapshot());
       if (event.type === 'turn.completed') {
         if (event.usage) usage = event.usage;
         // The CLI can recover from a transient stream/provider error in the same run.
@@ -113,6 +121,7 @@ export const executeCodex: Executor = async options => {
     });
     if (buffer.trim()) parseLine(buffer);
     try { summary = await readFile(path.join(options.cwd, 'final.txt'), 'utf8'); } catch { /* CLI failures may not write a final reply. */ }
+    outcome = result === 0 && !failure ? 'completed' : 'failed';
     return { exitCode: result, usage, summary, ...(failure ? { error: failure } : {}) };
   } finally {
     options.signal.removeEventListener('abort', abort);
@@ -120,6 +129,8 @@ export const executeCodex: Executor = async options => {
     // Killing the still-addressable process group here prevents those survivors.
     if (options.signal.aborted) killProcessGroup(child, 'SIGKILL');
     if (forceKill) clearTimeout(forceKill);
+    progress.finish(options.signal.aborted ? 'cancelled' : outcome);
+    await progressWriter.close(progress.snapshot());
     events.end(); errors.end();
     await Promise.all([finished(events), finished(errors)]);
   }

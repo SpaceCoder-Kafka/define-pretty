@@ -1,5 +1,6 @@
 import type { FeatureBoard } from './feature-board';
 import type { ModelConfig, RunStatus, Usage } from './types';
+import type { DraftPreview, ExecutionProgress } from './execution-progress';
 export interface BuiltinSourceInfo {
   slug: string; description: string; style: 'classic' | 'neon'; order: number;
 }
@@ -17,10 +18,12 @@ export interface FeatureTest {
   refinement?: { parentTestId: string; parentArtifactHash: string; feedback: string };
   status: RunStatus; createdAt: string; finishedAt?: string; elapsedMs?: number;
   hasPreview: boolean; changed?: boolean; error?: string; summary?: string; usage?: Usage; exitCode?: number | null;
+  progress?: ExecutionProgress; draftPreview?: DraftPreview;
 }
 
 export interface FeatureSourceRun {
   id: string; requirements: string; prompt: string; config: ModelConfig;
   status: RunStatus; createdAt: string; finishedAt?: string; elapsedMs?: number;
   source?: FeatureTestSource; error?: string; summary?: string; usage?: Usage; exitCode?: number | null;
+  progress?: ExecutionProgress; draftPreview?: DraftPreview;
 }

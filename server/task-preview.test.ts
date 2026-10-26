@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { startTaskPreview, TASK_PREVIEW_GUIDANCE } from './task-preview.ts';
+import { startTaskPreview, TASK_PREVIEW_GUIDANCE, readDraftPreview } from './task-preview.ts';
 import { previewCsp } from './security.ts';
 
 const execute = promisify(execFile);
@@ -39,6 +39,7 @@ test('task screenshot helper renders current local files and returns actual visu
     await execute(process.execPath, ['preview.mjs', '800', '600'], { cwd: f.cwd, timeout: 35_000 });
     const png = await readFile(path.join(f.cwd, 'preview.png'));
     const result = JSON.parse(await readFile(path.join(f.cwd, 'preview.json'), 'utf8'));
+    assert((await readDraftPreview(f.cwd))?.updatedAt, 'even a screenshot with diagnostics is a draft, not final acceptance');
     assert.equal(png.toString('ascii', 1, 4), 'PNG');
     assert.equal(png.readUInt32BE(16), 800);
     assert.equal(png.readUInt32BE(20), result.metrics.document.height);
@@ -141,8 +142,10 @@ test('task preview refuses an already aborted task and never overwrites a helper
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
 
-test('one capture timeout closes its browser and allows a repaired page to be captured', { timeout: 15_000 }, async () => {
-  const f = await fixture('<script>while(true){}</script>', 1800);
+test('one capture timeout closes its browser and allows a repaired page to be captured', { timeout: 25_000 }, async () => {
+  // The timeout should distinguish a hung page from a healthy one even when
+  // other browser suites are launching Chromium concurrently on a busy host.
+  const f = await fixture('<script>while(true){}</script>', 5000);
   try {
     const response = await f.capture();
     assert.equal(response.status, 504);
@@ -151,5 +154,25 @@ test('one capture timeout closes its browser and allows a repaired page to be ca
     const retry = await f.capture('?width=640&height=480');
     assert.equal(retry.status, 200);
     assert.equal((await retry.json()).metrics.title, 'Recovered');
+  } finally { await f.cleanup(); }
+});
+
+test('full-page capture loads offscreen lazy images while preserving real missing-image errors', { timeout: 20_000 }, async () => {
+  const html = '<h1>Long page</h1><div style="height:7000px"></div><img loading="lazy" src="assets/lazy.svg"><img loading="lazy" src="missing-lazy.png">';
+  const f = await fixture(html);
+  try {
+    assert.equal(await readDraftPreview(f.cwd), undefined);
+    await writeFile(path.join(f.cwd, 'website/assets/lazy.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="orange"/></svg>');
+    const response = await f.capture('?width=390&height=844');
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.metrics.images[0].loaded, true);
+    assert.equal(result.metrics.images[1].loaded, false);
+    assert(!result.errors.some((error: string) => error.includes('assets/lazy.svg')));
+    assert(result.errors.some((error: string) => error.includes('missing-lazy.png')));
+    assert.equal(await readFile(path.join(f.cwd, 'website/index.html'), 'utf8'), html, 'capture must not modify delivered HTML');
+    assert((await readDraftPreview(f.cwd))?.updatedAt);
+    await symlink(path.join(f.cwd, 'preview.mjs'), path.join(f.cwd, 'website/escape.js'));
+    assert.equal(await readDraftPreview(f.cwd), undefined, 'a later unsafe edit invalidates draft exposure');
   } finally { await f.cleanup(); }
 });
