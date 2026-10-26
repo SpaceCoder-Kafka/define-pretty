@@ -11,6 +11,10 @@ export interface FeatureTestSource {
 export interface FeatureTest {
   id: string; boardId: string; boardRevision: number; board: FeatureBoard;
   source: FeatureTestSource; config: ModelConfig; prompt: string; imageHash: string;
+  /** Frozen, unmarked visual input. Absent on older single-image tests. */
+  originalReference?: { filename: string; mimeType: string; sha256: string };
+  /** A new attempt based on an earlier result; source remains the original comparison baseline. */
+  refinement?: { parentTestId: string; parentArtifactHash: string; feedback: string };
   status: RunStatus; createdAt: string; finishedAt?: string; elapsedMs?: number;
   hasPreview: boolean; changed?: boolean; error?: string; summary?: string; usage?: Usage; exitCode?: number | null;
 }

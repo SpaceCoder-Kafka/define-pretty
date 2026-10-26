@@ -53,8 +53,18 @@ export function createApp(options: AppOptions): Express {
     res.status(202).json(await tests().start(requireSafeId(req.body?.boardId),revision,req.file!.buffer,modelInput(supplied,config),req.body?.sourceId ? requireSafeId(req.body.sourceId) : undefined));
   });
   app.get('/api/feature-tests/:id', async (req,res) => res.json(await tests().get(requireSafeId(req.params.id))));
+  app.post('/api/feature-tests/:id/refine', async (req,res) => {
+    if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
+    const id=requireSafeId(req.params.id), parent=await tests().get(id);
+    const defaults={...parent.config,cliVersion:config.cliVersion};
+    res.status(202).json(await tests().refine(id,text(req.body?.feedback,'继续优化要求',4000),modelInput(req.body?.config,defaults)));
+  });
   app.post('/api/feature-tests/:id/cancel', async (req,res) => res.json(await tests().cancel(requireSafeId(req.params.id))));
   app.get('/api/feature-tests/:id/image', async (req,res) => { const id=requireSafeId(req.params.id); await tests().get(id); res.type('png').sendFile(path.join(tests().directory(id),'reference.png'),{dotfiles:'allow'}); });
+  app.get('/api/feature-tests/:id/original-reference', async (req,res) => {
+    const reference = await tests().originalReferenceFile(requireSafeId(req.params.id));
+    res.type(reference.mimeType).sendFile(reference.file,{dotfiles:'allow'});
+  });
 
   const boards = () => { if (!options.featureBoards) fail('视觉特征工作台尚未启用。', 503); return options.featureBoards!; };
   const completions = () => { if(!options.featureCompletions)fail('卡片补全尚未启用。',503);return options.featureCompletions!; };
@@ -115,7 +125,10 @@ export function createPreviewApp(consolePort: number, featureTests?: FeatureTest
     if(req.params[0]==='sources') { await featureTests!.getSourceById(id); directory=featureTests!.sourceDirectory(id); }
     else if(req.params[0]==='source-runs') { const run=await featureTests!.getSourceRun(id); if(!['checking','completed'].includes(run.status)) fail('原网页尚未就绪。',404); directory=featureTests!.sourceRunWebsite(id); }
     else { const run=await featureTests!.get(id); if(!run.hasPreview || ['queued','running'].includes(run.status)) fail('测试网页尚未就绪。',404); directory=featureTests!.websiteDirectory(id); }
-    res.sendFile(await safeFilePath(directory,req.params[2] || 'index.html'),{dotfiles:'allow'});
+    const file = await safeFilePath(directory,req.params[2] || 'index.html');
+    // Sandboxed previews have an opaque origin; ES modules still require CORS.
+    res.setHeader('Access-Control-Allow-Origin','*');
+    res.sendFile(file,{dotfiles:'allow'});
   });
   app.get('/favicon.ico', (_req, res) => { res.status(204).end(); });
   app.use((_req, res) => { res.status(404).type('text').send('预览文件不存在。'); });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT, featureSchema } from './feature-boards.ts';
+import { cardsInput, FeatureBoards, regionInput, FEATURE_PROMPT, FEATURE_WRITING_PROMPT, featureSchema } from './feature-boards.ts';
 import { FileStore } from './store.ts';
 import { FULL_IMAGE_REGION, featureReady, featureInstruction, featureImplementation, featureSections } from '../shared/feature-board.ts';
 import type { Executor } from './codex.ts';
@@ -62,7 +62,7 @@ test('selection/instruction edits persist, reject stale writes, and exclude unse
     const again = new FeatureBoards(f.store); await again.initialize(); const loaded = await again.get(f.board.id);
     assert.equal(loaded.cards[0].selected, true); assert.equal(loaded.cards[0].application, '顶部导航');
     const instruction = featureInstruction(loaded);
-    assert.ok(instruction.includes('顶部导航')); assert.ok(instruction.includes('参考图中的出处')); assert.ok(!instruction.includes('不应导出的特征')); assert.ok(!instruction.includes('不要出现在配套指令中'));
+    assert.ok(instruction.includes('顶部导航')); assert.ok(!instruction.includes('不应导出的特征')); assert.ok(!instruction.includes('不要出现在配套指令中'));
     loaded.cards[0].selected = false; assert.equal(featureInstruction(loaded), '');
   } finally { await f.cleanup(); }
 });
@@ -77,7 +77,7 @@ test('real generation contract snapshots input and keeps old cards when starting
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
     const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 4); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
-    assert.equal(input.cardFormat, 8); assert.equal(input.guidanceVersion, 11);
+    assert.equal(input.cardFormat, 8); assert.equal(input.guidanceVersion, 13);
     const schema = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'schema.json'), 'utf8'));
     assert.deepEqual(schema.properties.cards.items.properties.tier.enum, ['foundation', 'signature']);
     assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
@@ -178,8 +178,7 @@ test('global style is a single fixed full-image card, remains optional, and dire
     assert.match(selected, /已选中“整体视觉风格”/);
     assert.match(selected, /整页视觉风格协调/);
     assert.match(selected, /不因为整体风格、配色、字体或装饰要求而默认重排整页/);
-    assert.match(selected, /整体风格卡不代替布局结构卡的选择/);
-    assert.match(selected, /未选择的专项卡片/);
+    assert(!selected.includes('布局比例示意'));
     assert.match(selected, /1. 整体视觉风格/);
     await assert.rejects(f.boards.edit(saved.id, { revision: saved.revision, title: saved.title, cards: [local] }), /固定卡片/);
     const edited = await f.boards.edit(saved.id, { revision: saved.revision, title: saved.title, cards: saved.cards });
@@ -196,7 +195,6 @@ test('layout selection directly authorizes its structure, respects scope, and ex
     const prompt = featureInstruction(layoutBoard);
     assert(prompt.includes(structure.application));
     assert.match(prompt, /范围之外仅做必要的衔接调整/);
-    assert.match(prompt, /不以保留原有布局或改动最少为目标/);
     assert.match(prompt, /直接按这套结构实施/);
     assert.match(prompt, /58%/);
     assert.match(prompt, /内容区（不含导航）/);
@@ -210,6 +208,15 @@ test('layout selection directly authorizes its structure, respects scope, and ex
     assert(!localPrompt.includes('58%'));
     assert.match(localPrompt, /历史专项卡若明确描述布局关系/);
   } finally { await f.cleanup(); }
+});
+
+test('analysis guidance permits read-only image inspection and leaves implementation technology open', () => {
+  assert.match(FEATURE_WRITING_PROMPT, /只读命令.*只读工具/);
+  assert.match(FEATURE_WRITING_PROMPT, /保持原始输入及已有成果不变/);
+  assert.match(FEATURE_WRITING_PROMPT, /只返回所附 JSON Schema/);
+  assert.match(FEATURE_WRITING_PROMPT, /适合生图时可直接调用/);
+  assert(!FEATURE_WRITING_PROMPT.includes('不执行命令'));
+  assert(!FEATURE_WRITING_PROMPT.includes('若只能复刻原图才能遵循'));
 });
 
 test('layout diagrams validate, keep concrete titles, persist through edits and sort before other specialties', async () => {

@@ -55,6 +55,9 @@ export const executeCodex: Executor = async options => {
     '--model', options.config.model, '-c', `model_reasoning_effort=${JSON.stringify(options.config.reasoningEffort)}`,
     '-o', path.join(options.cwd, 'final.txt'),
   ];
+  // Generation can fetch assets and build dependencies inside its isolated work directory.
+  // This does not change the network policy of the finished page's preview.
+  if (!options.readOnly) args.push('-c', 'sandbox_workspace_write.network_access=true');
   if (options.config.provider) args.push('-c', `model_provider=${JSON.stringify(options.config.provider)}`);
   if (options.outputSchema) args.push('--output-schema', options.outputSchema);
   for (const file of options.referenceFiles ?? (options.referenceFile ? [options.referenceFile] : [])) args.push('--image', file);

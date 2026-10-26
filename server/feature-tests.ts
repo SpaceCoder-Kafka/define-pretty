@@ -2,17 +2,26 @@ import { createHash, randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { featureInstruction, selectedFeatures } from '../shared/feature-board.ts';
+import { featureInstruction, selectedFeatures, VISUAL_IMPLEMENTATION_GUIDANCE } from '../shared/feature-board.ts';
 import type { FeatureTest, FeatureTestSource, FeatureSourceRun } from '../shared/feature-test.ts';
 import type { ModelConfig } from '../shared/types.ts';
 import { FeatureBoards } from './feature-boards.ts';
-import { executeCodex, hashWebsite, type Executor } from './codex.ts';
+import { executeCodex, hashWebsite, type Executor, type ExecutionOptions } from './codex.ts';
 import { chromeExecutable, inspectWebsite } from './validation.ts';
 import { detectImageType, requireSafeId, safeFilePath } from './security.ts';
 import { fail, text } from './input.ts';
 import { builtinWebsiteRoot, freezeBuiltinSources } from './builtin-sources.ts';
+import { startTaskPreview, TASK_PREVIEW_GUIDANCE } from './task-preview.ts';
 
 const activeStatus = (status: string) => ['queued','running','checking'].includes(status);
+const WEBSITE_WORKFLOW = `生成期间可联网查找或下载素材、安装依赖、构建和启动临时预览，并按实际截图自主对照、修正。浏览器连接器不可用时，可使用命令行无头浏览器等可用方式继续验证。
+${TASK_PREVIEW_GUIDANCE}
+最终只在 website/ 下交付可直接加载的静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html；用户预览时无需安装或构建。生成图片和下载素材保存到 website/assets/，使用相对路径；依赖、构建源文件和临时产物放在 website/ 之外。允许通过 HTTPS 加载字体与字体样式表，其余资源保持本地化，不引入远程脚本或业务接口。隔离预览支持普通 SVG 图片；SVG sprite 请将 symbol 内联到当前 HTML，用 <use href="#id"> 引用，外链 <use href="assets/icons.svg#id"> 会受浏览器同源限制。预览环境不提供 localStorage，交互应实际可用。完成后简述交付和验证结果，未验证的部分如实说明。`;
+function referenceInputGuidance(originalReference?: FeatureTest['originalReference']) {
+  return `任务的只读视觉输入位于工作目录之外：所选卡片导出图为 ../reference.png。${originalReference
+    ? `无标记原图为 ../${originalReference.filename}；需要以图生图或编辑时，可将这个原图路径作为图像参考输入。`
+    : '本次沿用历史单图记录，没有可用的无标记原图；只附上卡片导出图，不要假定存在第二张输入。'}输入文件保持不变，原图内容只为已选特征提供视觉依据。`;
+}
 export type TestChecker = (url: string, signal: AbortSignal) => Promise<void>;
 export function allowedPreviewResource(target: URL, origin: string, resourceType: string): boolean {
   return target.origin === origin || !['http:', 'https:'].includes(target.protocol) ||
@@ -25,6 +34,7 @@ export const checkFeatureTest: TestChecker = async (url, signal) => {
     if (signal.aborted) throw new Error('检查已中断。');
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const errors: string[] = [];
+    const failedRequests: { url: string; error: string }[] = [];
     await page.route('**/*', async route => {
       const target = new URL(route.request().url());
       if (!allowedPreviewResource(target, new URL(url).origin, route.request().resourceType())) { errors.push(`页面尝试加载不允许的外部资源：${target.href}`); await route.abort(); }
@@ -32,7 +42,7 @@ export const checkFeatureTest: TestChecker = async (url, signal) => {
     });
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.status() >= 400) errors.push(`资源 HTTP ${response.status()}：${response.url()}`); });
-    page.on('requestfailed', request => errors.push(`${request.failure()?.errorText || '资源请求失败'}：${request.url()}`));
+    page.on('requestfailed', request => failedRequests.push({ url: request.url(), error: request.failure()?.errorText || '资源请求失败' }));
     const response = await page.goto(url, { waitUntil: 'load', timeout: 20000 });
     await page.waitForTimeout(300);
     const fontErrors = await page.evaluate(async () => {
@@ -43,7 +53,25 @@ export const checkFeatureTest: TestChecker = async (url, signal) => {
       } finally { clearTimeout(timer); }
     });
     errors.push(...fontErrors);
-    if (!response?.ok() || errors.length) throw new Error(`网页加载检查未通过：${errors.slice(0,3).join('；') || response?.status()}`);
+    const externalSvgUses = new Set(await page.evaluate(() => {
+      if (globalThis.origin !== 'null') return [];
+      const documentUrl = new URL(location.href); documentUrl.hash = '';
+      return [...document.querySelectorAll<SVGUseElement>('svg use')].flatMap(use => {
+        if (!use.href.baseVal) return [];
+        try {
+          const target = new URL(use.href.baseVal, use.baseURI); target.hash = '';
+          return target.href === documentUrl.href ? [] : [target.href];
+        } catch { return []; }
+      });
+    }));
+    for (const failure of failedRequests) {
+      const target = new URL(failure.url); target.hash = '';
+      // Chromium's opaque-origin SVG use failure is distinct from ordinary CORS failures.
+      errors.push(failure.error === 'origin' && externalSvgUses.has(target.href)
+        ? `外链 SVG <use> 无法在隔离预览中加载：${target.href}。请将 symbol 内联到当前 HTML，并使用 <use href="#id"> 引用；普通 SVG 图片仍可使用。`
+        : `${failure.error}：${failure.url}`);
+    }
+    if (!response?.ok() || errors.length) throw new Error(`网页加载检查未通过：${[...new Set(errors)].slice(0,3).join('；') || response?.status()}`);
   } finally { signal.removeEventListener('abort', close); await browser.close(); }
 };
 
@@ -58,12 +86,24 @@ export class FeatureTests {
   constructor(private boards: FeatureBoards, private mainRoot: string, private previewOrigin: string, private executor: Executor = executeCodex, private checker: TestChecker = checkFeatureTest, private timeoutMs = 1_800_000, private builtinRoot = builtinWebsiteRoot) {
     this.root = path.join(path.dirname(boards.root), 'feature-tests');
   }
+  private async executeWebsite(options: ExecutionOptions) {
+    const preview = await startTaskPreview({ cwd: options.cwd, signal: options.signal });
+    try { return await this.executor(options); }
+    finally { await preview.close(); }
+  }
   directory(id: string) { return path.join(this.root, 'runs', requireSafeId(id)); }
   workDirectory(id: string) { return path.join(this.directory(id),'work'); }
   websiteDirectory(id: string) { return path.join(this.workDirectory(id),'website'); }
   sourceDirectory(id: string) { return path.join(this.root, 'sources', requireSafeId(id), 'website'); }
   private async persist(run: FeatureTest) { const dir = this.directory(run.id); await mkdir(dir, { recursive: true }); const tmp = path.join(dir, 'run.json.tmp'); await writeFile(tmp, JSON.stringify(run,null,2), { mode: 0o600 }); await rename(tmp,path.join(dir,'run.json')); }
   async get(id: string): Promise<FeatureTest> { return JSON.parse(await readFile(path.join(this.directory(id),'run.json'),'utf8')); }
+  async originalReferenceFile(id: string): Promise<{ file: string; mimeType: string }> {
+    const run = await this.get(id), reference = run.originalReference;
+    if (!reference) fail('该历史测试未保存原始参考图。',404);
+    const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[reference.mimeType];
+    if (!extension || reference.filename !== `original-reference${extension}`) fail('原始参考图记录无效。',400);
+    return { file: await safeFilePath(this.directory(id),reference.filename), mimeType: reference.mimeType };
+  }
   async list(boardId?: string): Promise<FeatureTest[]> {
     const entries = await readdir(path.join(this.root,'runs'), { withFileTypes: true });
     const pending = await Promise.all(entries.filter(e=>e.isDirectory()).map(async e=>{try{return await this.get(e.name);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}}));
@@ -169,7 +209,7 @@ export class FeatureTests {
     try {
       await this.listSources();
       const id=randomUUID(); await mkdir(this.sourceRunWebsite(id),{recursive:true});
-      const prompt=`请根据以下用户需求生成一份完整、可使用的网页。自行决定合适的视觉设计。\n只在 website/ 下交付静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html。本地资源使用相对路径，无需构建或安装依赖。允许通过 HTTPS 加载字体与字体样式表，其他资源保持本地化，不使用远程脚本、业务接口或依赖 localStorage。交互应实际可用，演示数据保持固定。完成后简述交付内容。\n\n用户需求：\n${requirements}`;
+      const prompt=`请根据以下用户需求生成一份完整、可使用的网页。自行决定合适的视觉设计，演示数据保持固定。\n${VISUAL_IMPLEMENTATION_GUIDANCE}\n${WEBSITE_WORKFLOW}\n\n用户需求：\n${requirements}`;
       const run:FeatureSourceRun={id,requirements,prompt,config,createdAt:new Date().toISOString(),status:'running'};
       await writeFile(path.join(this.sourceRunDirectory(id),'input.json'),JSON.stringify(run,null,2));
       await writeFile(path.join(this.sourceRunDirectory(id),'prompt.txt'),prompt);
@@ -182,7 +222,7 @@ export class FeatureTests {
   private async executeSource(run: FeatureSourceRun, active: NonNullable<FeatureTests['active']>) {
     const timer=setTimeout(()=>{active.reason='timeout';active.controller.abort();},this.timeoutMs);
     try {
-      const result=await this.executor({run:{id:run.id},cwd:this.sourceWorkDirectory(run.id),prompt:run.prompt,config:run.config,signal:active.controller.signal});
+      const result=await this.executeWebsite({run:{id:run.id},cwd:this.sourceWorkDirectory(run.id),prompt:run.prompt,config:run.config,signal:active.controller.signal});
       Object.assign(run,{exitCode:result.exitCode,usage:result.usage,summary:result.summary});
       if(active.controller.signal.aborted)throw new Error('生成已停止。');
       if(result.exitCode!==0 || result.error)throw new Error(result.error || `Codex 退出码：${result.exitCode}`);
@@ -215,25 +255,107 @@ export class FeatureTests {
       if(board.revision!==revision) fail('卡片已更新，请用当前选择重新测试。',409);
       if(board.status==='running' || !selectedFeatures(board).length) fail('请先完成并勾选要验证的卡片。');
       if(detectImageType(image)?.mimeType!=='image/png') fail('测试需要导出的 PNG 卡片图片。');
+      const originalBytes = await this.boards.readReference(board.reference.id);
+      const originalType = detectImageType(originalBytes);
+      const originalHash = createHash('sha256').update(originalBytes).digest('hex');
+      if (!originalType || originalType.mimeType !== board.reference.mimeType || originalHash !== board.reference.sha256) fail('原始参考图已改变，请重新上传后再测试。',409);
+      const originalReference = { filename: `original-reference${originalType.extension}`, mimeType: originalType.mimeType, sha256: originalHash };
       const source=sourceId ? await this.getSourceById(sourceId) : await this.getSource();
       await safeFilePath(this.sourceDirectory(source.runId),'index.html');
       if(await hashWebsite(this.sourceDirectory(source.runId))!==source.hash) fail('冻结的验证基线已改变。',409);
       const id=randomUUID(), dir=this.directory(id); await mkdir(this.workDirectory(id),{recursive:true});
       await cp(this.sourceDirectory(source.runId),this.websiteDirectory(id),{recursive:true});
       if(await hashWebsite(this.websiteDirectory(id))!==source.hash) fail('测试副本校验失败。',409);
-      const prompt=`website/ 中已有一份完整的网页，请直接修改这个副本。交付静态 HTML、CSS、JavaScript，入口为 website/index.html。本地资源使用相对路径；字体是允许的外部依赖，可以通过 HTTPS 字体样式表或 @font-face 直接加载远程字体。其他资源仍保持本地化，不引入远程脚本或业务接口。\n\n${featureInstruction(board)}`;
-      const run: FeatureTest={id,boardId,boardRevision:revision,board,source,config,prompt,imageHash:createHash('sha256').update(image).digest('hex'),createdAt:new Date().toISOString(),status:'running',hasPreview:false};
-      await writeFile(path.join(dir,'reference.png'),image); await writeFile(path.join(dir,'prompt.txt'),prompt); await writeFile(path.join(dir,'input.json'),JSON.stringify(run,null,2));
-      if(this.stopped) { run.status='interrupted'; run.error='服务停止，测试未启动。'; await this.persist(run); return run; }
-      await this.persist(run);
-      const active={id,controller:new AbortController(),promise:Promise.resolve(),reason:undefined as 'cancelled'|'interrupted'|'timeout'|undefined}; this.active=active;
-      active.promise=this.execute(run,active).finally(()=>{this.active=undefined;}); return structuredClone(run);
+      const prompt=`website/ 中已有一份完整的网页，请直接修改这个副本，保留真实业务内容、数据和交互。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}\n\n${featureInstruction(board)}`;
+      const run: FeatureTest={id,boardId,boardRevision:revision,board,source,config,prompt,imageHash:createHash('sha256').update(image).digest('hex'),originalReference,createdAt:new Date().toISOString(),status:'running',hasPreview:false};
+      await writeFile(path.join(dir,originalReference.filename),originalBytes,{flag:'wx',mode:0o600});
+      await writeFile(path.join(dir,'reference.png'),image);
+      return await this.publishTest(run);
     } finally { this.preparing=undefined; prepared(); }
+  }
+  async refine(parentId: string, feedback: string, config: ModelConfig): Promise<FeatureTest> {
+    feedback=text(feedback,'继续优化要求',4000).trim();
+    if(this.stopped || this.preparing || this.active) fail('已有测试正在执行，请等待完成或取消后再试。',409);
+    let prepared!:()=>void; this.preparing=new Promise<void>(resolve=>{prepared=resolve;});
+    try {
+      const parent=await this.get(requireSafeId(parentId));
+      if(parent.id!==parentId) fail('父测试记录标识不一致。',409);
+      if(!parent.hasPreview || !['completed','failed','cancelled','interrupted'].includes(parent.status)) fail('只有已结束且保留可预览产物的测试才能继续优化。',409);
+      const previousFeedback=await this.refinementFeedback(parent);
+      const board=structuredClone(parent.board), source=structuredClone(parent.source);
+      if(!selectedFeatures(board).length) fail('原测试没有已选特征，不能继续优化。',409);
+      const parentWebsite=this.websiteDirectory(parent.id);
+      await safeFilePath(parentWebsite,'index.html');
+      for(const file of await inspectWebsite(parentWebsite)) await safeFilePath(parentWebsite,file);
+      const parentArtifactHash=await hashWebsite(parentWebsite);
+      await safeFilePath(this.sourceDirectory(source.runId),'index.html');
+      if(await hashWebsite(this.sourceDirectory(source.runId))!==source.hash) fail('冻结的验证基线已改变。',409);
+      const image=await readFile(await safeFilePath(this.directory(parent.id),'reference.png'));
+      if(detectImageType(image)?.mimeType!=='image/png' || createHash('sha256').update(image).digest('hex')!==parent.imageHash) fail('父测试的卡片输入已改变，不能继续优化。',409);
+      let originalBytes: Buffer | undefined;
+      if(parent.originalReference) originalBytes=await readFile((await this.originalReferenceFile(parent.id)).file);
+      else {
+        // Older tests did not freeze the second image. Recover only the exact
+        // reference represented by their frozen board, never a newer board image.
+        try { originalBytes=await this.boards.readReference(board.reference.id); }
+        catch(error) { if((error as NodeJS.ErrnoException).code!=='ENOENT') throw error; }
+      }
+      let originalReference: FeatureTest['originalReference'];
+      if(originalBytes) {
+        const type=detectImageType(originalBytes), sha256=createHash('sha256').update(originalBytes).digest('hex');
+        if(!type || type.mimeType!==board.reference.mimeType || sha256!==board.reference.sha256 ||
+          (parent.originalReference && (type.mimeType!==parent.originalReference.mimeType || sha256!==parent.originalReference.sha256))) fail('父测试的原始参考图已改变，不能继续优化。',409);
+        originalReference={filename:`original-reference${type.extension}`,mimeType:type.mimeType,sha256};
+      }
+      const id=randomUUID(), dir=this.directory(id); await mkdir(this.workDirectory(id),{recursive:true});
+      await cp(parentWebsite,this.websiteDirectory(id),{recursive:true});
+      if(await hashWebsite(parentWebsite)!==parentArtifactHash || await hashWebsite(this.websiteDirectory(id))!==parentArtifactHash) fail('父测试产物在复制期间发生变化，请重试。',409);
+      const history=previousFeedback.length?`\n\n此前已接受的优化要求（按旧到新排列）：\n已满足的要求继续保持；本轮有明确变更时，本轮要求优先。\n${previousFeedback.map((value,index)=>`第 ${index+1} 轮：\n${value}`).join('\n\n')}`:'';
+      const prompt=`website/ 中是上一轮测试产物的独立副本。请根据本次反馈继续缩小与参考图的视觉差距，保留已实现的有效效果、真实业务内容、数据和交互；仅修改当前副本。沿用下面冻结的卡片选择与应用范围，未选特征不成为新增要求。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}${history}\n\n本次继续优化反馈：\n${feedback}\n\n${featureInstruction(board,{hasOriginalReference:!!originalReference})}`;
+      const run: FeatureTest={id,boardId:parent.boardId,boardRevision:parent.boardRevision,board,source,config,prompt,imageHash:parent.imageHash,originalReference,
+        refinement:{parentTestId:parent.id,parentArtifactHash,feedback},createdAt:new Date().toISOString(),status:'running',hasPreview:false};
+      await writeFile(path.join(dir,'reference.png'),image,{flag:'wx',mode:0o600});
+      if(originalReference && originalBytes) await writeFile(path.join(dir,originalReference.filename),originalBytes,{flag:'wx',mode:0o600});
+      return await this.publishTest(run);
+    } finally {this.preparing=undefined;prepared();}
+  }
+  private async refinementFeedback(parent: FeatureTest): Promise<string[]> {
+    const visited=new Set([parent.id]), feedback:string[]=[];
+    let current=parent;
+    while(current.refinement) {
+      const value=current.refinement.feedback;
+      if(typeof value!=='string' || !value.trim() || value.length>4000) fail('历史优化要求记录无效，不能忽略后继续优化。',409);
+      feedback.push(value);
+      let ancestorId:string;
+      try { ancestorId=requireSafeId(current.refinement.parentTestId); }
+      catch { fail('历史优化链包含无效的父测试标识。',409); }
+      if(visited.has(ancestorId)) fail('历史优化链出现循环，不能继续优化。',409);
+      visited.add(ancestorId);
+      try { current=await this.get(ancestorId); }
+      catch(error) {
+        if((error as NodeJS.ErrnoException).code==='ENOENT') fail('历史优化链缺少父测试记录，不能丢弃此前要求后继续优化。',409);
+        throw error;
+      }
+      if(current.id!==ancestorId) fail('历史优化链的记录标识不一致。',409);
+    }
+    return feedback.reverse();
+  }
+  private async publishTest(run: FeatureTest): Promise<FeatureTest> {
+    const dir=this.directory(run.id);
+    await writeFile(path.join(dir,'prompt.txt'),run.prompt);
+    await writeFile(path.join(dir,'input.json'),JSON.stringify(run,null,2));
+    if(this.stopped) { run.status='interrupted'; run.error='服务停止，测试未启动。'; await this.persist(run); return structuredClone(run); }
+    await this.persist(run);
+    const active={id:run.id,controller:new AbortController(),promise:Promise.resolve(),reason:undefined as 'cancelled'|'interrupted'|'timeout'|undefined}; this.active=active;
+    active.promise=this.execute(run,active).finally(()=>{this.active=undefined;}); return structuredClone(run);
   }
   private async execute(run: FeatureTest, active: NonNullable<FeatureTests['active']>) {
     const timer=setTimeout(()=>{active.reason='timeout';active.controller.abort();},this.timeoutMs);
     try {
-      const result=await this.executor({run: {id:run.id},cwd:this.workDirectory(run.id),prompt:run.prompt,referenceFile:path.join(this.directory(run.id),'reference.png'),config: run.config,signal:active.controller.signal});
+      const referenceFiles = [path.join(this.directory(run.id),'reference.png')];
+      if (run.originalReference) referenceFiles.push((await this.originalReferenceFile(run.id)).file);
+      if(active.controller.signal.aborted) throw new Error('测试已停止。');
+      const result=await this.executeWebsite({run: {id:run.id},cwd:this.workDirectory(run.id),prompt:run.prompt,referenceFiles,config: run.config,signal:active.controller.signal});
       Object.assign(run,{exitCode:result.exitCode,usage:result.usage,summary:result.summary});
       if(active.controller.signal.aborted) throw new Error('测试已停止。');
       try { await inspectWebsite(this.websiteDirectory(run.id)); run.hasPreview=true; } catch { /* Keep failed files, but do not expose an invalid tree. */ }

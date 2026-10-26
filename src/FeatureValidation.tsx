@@ -62,6 +62,15 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
       setRuns(old=>[run,...old.filter(r=>r.id!==run.id)]);setSelectedId(run.id);
     } catch(cause){setError(errorMessage(cause));}finally{setBusy(false);section.current?.scrollIntoView({behavior:'smooth',block:'start'});}
   }
+  async function refine(feedback:string) {
+    if(!current?.hasPreview || isActive(current) || !config || busy || running || !feedback.trim())return;
+    previewChosen.current=true;
+    setBusy(true);setError('');
+    try {
+      const run=await api<FeatureTest>(`/feature-tests/${current.id}/refine`,{method:'POST',body:JSON.stringify({feedback:feedback.trim(),config})});
+      setRuns(old=>[run,...old.filter(r=>r.id!==run.id)]);setSelectedId(run.id);
+    }catch(cause){setError(errorMessage(cause));}finally{setBusy(false);section.current?.scrollIntoView({behavior:'smooth',block:'start'});}
+  }
   async function cancel() { if(!current)return;setBusy(true);setError('');try{const next=await api<FeatureTest>(`/feature-tests/${current.id}/cancel`,{method:'POST'});setRuns(old=>old.map(r=>r.id===next.id?next:r));}catch(cause){setError(errorMessage(cause));}finally{setBusy(false);} }
   async function generateSource() {
     if(!config || busy || running || !requirements.trim())return;
@@ -78,7 +87,8 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
   }
   function chooseSource(id:string) {previewChosen.current=true;setSourceId(id);setSelectedId('');}
   function chooseHistory(id:string) {previewChosen.current=true;setSelectedId(id);}
-  return {sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
+  const refinementUsesSavedInput=!!current&&((board?.id!==current.boardId || board?.revision!==current.boardRevision)||(!!source&&source.runId!==current.source.runId));
+  return {sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,refine,refinementUsesSavedInput,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
 }
 type State=ReturnType<typeof useFeatureTests>;
 function Website({name,url,empty,actions}: {name:string;url?:string;empty:string;actions?:ReactNode}) {
@@ -103,6 +113,10 @@ function BuiltinSourceCard({source,origin,selected,disabled,onChoose,onPreview}:
       <button className={`feature-button${selected?' primary':''}`} disabled={disabled} aria-label={`使用${source.title}`} aria-pressed={selected} onClick={onChoose}>{selected?<><Check size={14}/>已选为原网页</>:'使用此页'}</button>
     </div>
   </article>;
+}
+
+function ImplementationSummary({summary}: {summary?:string}) {
+  return summary?.trim() ? <details className="feature-implementation-summary"><summary>实施说明</summary><pre>{summary}</pre></details> : null;
 }
 
 function SourcePicker({state,onClose}: {state:State;onClose:()=>void}) {
@@ -145,7 +159,8 @@ function SourcePicker({state,onClose}: {state:State;onClose:()=>void}) {
           {config&&<div className="feature-test-controls"><label>生成模型<input value={config.model} disabled={state.busy||state.running} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy||state.running} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>与测试模型共用设置</span></div>}
           <div className="feature-source-actions"><button className="feature-button primary" disabled={!state.requirements.trim()||state.busy||state.running||!state.authenticated||!config} onClick={()=>void state.generateSource()}>{state.sourceRunning?<LoaderCircle className="spin" size={16}/>:null}{state.sourceRunning?'原网页生成中…':'生成原始网页'}</button><span>最长 30 分钟 · 关闭弹窗后继续生成</span></div>
           {state.sourceRuns[0]&&<div className="feature-source-job" role="status"><span>{isActive(state.sourceRuns[0])?'原网页生成中':labels[state.sourceRuns[0].status]} · {state.sourceRuns[0].requirements.slice(0,60)}{state.sourceRuns[0].error&&`：${state.sourceRuns[0].error}`}</span>{isActive(state.sourceRuns[0])&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancelSource(state.sourceRuns[0].id)}>取消生成</button>}</div>}
-          {state.sourceRuns.length>0&&<details><summary>原网页生成历史（{state.sourceRuns.length}）</summary>{state.sourceRuns.map(r=><div key={r.id} className="feature-source-job"><span>{new Date(r.createdAt).toLocaleString('zh-CN')} · {isActive(r)?'生成中':labels[r.status]} · {r.requirements.slice(0,100)}{r.error&&`：${r.error}`}</span>{r.status==='completed'&&<button className="feature-button" disabled={state.busy||state.running} onClick={()=>chooseSource(r.id)}>使用此页</button>}</div>)}</details>}
+          <ImplementationSummary summary={state.sourceRuns[0]?.summary}/>
+          {state.sourceRuns.length>0&&<details><summary>原网页生成历史（{state.sourceRuns.length}）</summary>{state.sourceRuns.map(r=><div key={r.id}><div className="feature-source-job"><span>{new Date(r.createdAt).toLocaleString('zh-CN')} · {isActive(r)?'生成中':labels[r.status]} · {r.requirements.slice(0,100)}{r.error&&`：${r.error}`}</span>{r.status==='completed'&&<button className="feature-button" disabled={state.busy||state.running} onClick={()=>chooseSource(r.id)}>使用此页</button>}</div><ImplementationSummary summary={r.summary}/></div>)}</details>}
         </div>
       </details>
       {state.error&&<div className="feature-alert" role="alert">{state.error}</div>}
@@ -158,17 +173,29 @@ export default function FeatureValidation({state}: {state:State}) {
   const {source,current,config}=state;
   const original=current?.source || source;
   const [sourcePickerOpen,setSourcePickerOpen]=useState(false);
+  const [feedback,setFeedback]=useState(''), feedbackId=useId();
+  useEffect(()=>{setFeedback('');},[current?.id]);
+  const parentIndex=current?.refinement?state.runs.findIndex(run=>run.id===current.refinement!.parentTestId):-1;
   return <section className="feature-validation" id="original-websites" ref={state.section}>
-    <div className="feature-validation-head"><div><h2><FlaskConical size={20}/>验证所选设计</h2><p>从同一份原始网页开始，将导出图片与配套指令交给 Codex，比较实际效果。</p></div><span>统一视口 · 1440 × 1000</span></div>
+    <div className="feature-validation-head"><div><h2><FlaskConical size={20}/>验证所选设计</h2><p>首次测试从冻结的原网页开始，将卡片图、无标记原图与指令交给 Codex；之后可按反馈继续优化结果。</p></div><span>统一视口 · 1440 × 1000</span></div>
     {original&&<p className="feature-test-source">{current?'本次历史对比的原网页':'当前原网页'}：{original.title} · {original.builtin?'内置网页':new Date(original.createdAt).toLocaleString('zh-CN')} · 已冻结副本{current&&source&&source.runId!==original.runId?`（下一次测试将使用「${source.title}」）`:''}</p>}
-    <div className="feature-test-controls">{config&&<><label>测试模型<input value={config.model} disabled={state.busy} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>用于生成原网页与下一次测试 · 与卡片生成配置独立</span></>}
+    <div className="feature-test-controls">{config&&<><label>测试模型<input value={config.model} disabled={state.busy} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>用于生成原网页、测试与继续优化 · 与卡片生成配置独立</span></>}
     {state.runs.length>0&&<label className="feature-test-history">测试历史<select value={state.selectedId} onChange={e=>state.setSelectedId(e.target.value)}><option value="">当前原网页 · 尚未选择测试结果</option>{state.runs.map((r,i)=><option key={r.id} value={r.id}>第 {state.runs.length-i} 次 · {new Date(r.createdAt).toLocaleTimeString('zh-CN')} · {labels[r.status]}</option>)}</select></label>}</div>
     {state.error&&<div className="feature-alert" role="alert">{state.error}</div>}
     {current&&<div className="feature-test-state"><div>{isActive(current)&&<LoaderCircle className="spin" size={16}/>}<strong>{labels[current.status]}</strong><span>{current.config.model} · {current.config.reasoningEffort} · {selectedFeatures(current.board).map(c=>c.title).join(' / ')}</span></div>{isActive(current)&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancel()}>取消测试</button>}</div>}
     {current?.error&&<div className="feature-alert">{current.error}{current.hasPreview?' 已保留网页结果供查看。':''}</div>}
+    <ImplementationSummary summary={current?.summary}/>
+    {current?.refinement&&<div className="feature-refinement-history"><strong>{parentIndex>=0?`基于第 ${state.runs.length-parentIndex} 次结果继续优化`:'基于历史结果继续优化'}</strong><p>{current.refinement.feedback}</p></div>}
     {current?.status==='completed'&&current.changed===false&&<p className="feature-test-source">本次网页文件与原网页一致，未产生修改。</p>}
     <div className="feature-test-pair"><Website name="原始网页" url={original?`${state.origin}/feature-tests/sources/${original.runId}/index.html`:undefined} empty="点击「更换网页」选择内置场景，或自定义生成网页。" actions={<button className="feature-button" aria-haspopup="dialog" onClick={()=>setSourcePickerOpen(true)}>{state.sourceRunning?<LoaderCircle className="spin" size={14}/>:<LayoutGrid size={14}/>} {state.sourceRunning?'查看生成进度':'更换网页'}</button>}/><Website name="优化后的网页" url={current?.hasPreview?`${state.origin}/feature-tests/runs/${current.id}/index.html`:undefined} empty={isActive(current)?'Codex 正在根据所选卡片修改网页…':'勾选卡片后，点击底部「测试所选设计」。'}/></div>
-    {current&&<details className="feature-test-input"><summary>查看本次实际输入图片与完整指令</summary><div><img src={`/api/feature-tests/${current.id}/image`} alt="本次发送给 Codex 的所选卡片图片"/><pre>{current.prompt}</pre></div></details>}
+    {current?.hasPreview&&!isActive(current)&&<div className="feature-refinement">
+      <label htmlFor={feedbackId}>希望继续改进什么</label>
+      <p>继续修改此结果，沿用它保存的卡片选择、参考图和原网页，每轮结果都会保留。</p>
+      {state.refinementUsesSavedInput&&<p className="feature-refinement-scope">当前卡片版本或原网页选择与此结果不同。要应用当前选择，请使用「测试所选设计」。</p>}
+      <textarea id={feedbackId} rows={3} maxLength={4000} disabled={state.busy||state.running} value={feedback} onChange={event=>setFeedback(event.target.value)} placeholder="例如：插画更贴近参考图的扁平线描，项目预览补足细节，并检查标题与留白比例。"/>
+      <button className="feature-button primary" disabled={!feedback.trim()||state.busy||state.running||!state.authenticated||!config} onClick={()=>void state.refine(feedback)}>继续优化此结果</button>
+    </div>}
+    {current&&<details className="feature-test-input"><summary>查看本次实际输入图片与完整指令</summary><div><div className="feature-test-input-images"><figure><figcaption>图片 1 · 所选卡片图</figcaption><img src={`/api/feature-tests/${current.id}/image`} alt="本次发送给 Codex 的所选卡片图片"/></figure>{current.originalReference&&<figure><figcaption>图片 2 · 无标记原图</figcaption><p>仅补充已选特征的视觉依据，不扩大修改范围。</p><img src={`/api/feature-tests/${current.id}/original-reference`} alt="本次发送给 Codex 的冻结无标记原图"/></figure>}</div><pre>{current.prompt}</pre></div></details>}
     {sourcePickerOpen&&<SourcePicker state={state} onClose={()=>setSourcePickerOpen(false)}/>}
   </section>;
 }

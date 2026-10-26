@@ -51,6 +51,31 @@ setTimeout(() => {
   });
 });
 
+test('website execution enables network access and preserves provider and ordered visual inputs', async () => {
+  await fakeCli(`process.stdin.resume();`, async (directory, options) => {
+    const references = [path.join(directory, 'selected-features.png'), path.join(directory, 'original-reference.webp')];
+    await executeCodex({ ...options, config: { ...options.config, provider: 'configured-provider' }, referenceFiles: references });
+    const { args } = JSON.parse(await readFile(path.join(directory, 'command.json'), 'utf8')) as { args: string[] };
+    assert.equal(args[args.indexOf('--sandbox') + 1], 'workspace-write');
+    assert(args.includes('sandbox_workspace_write.network_access=true'));
+    assert(args.includes('approval_policy="never"'));
+    assert(args.includes('model_provider="configured-provider"'));
+    assert.deepEqual(args.flatMap((argument, index) => argument === '--image' ? [args[index + 1]] : []), references);
+    assert(!args.includes('--dangerously-bypass-approvals-and-sandbox'));
+  });
+});
+
+test('analysis keeps read-only permissions and does not enable shell network access', async () => {
+  await fakeCli(`process.stdin.resume();`, async (directory, options) => {
+    await executeCodex({ ...options, readOnly: true, referenceFile: '/input/reference.png', outputSchema: '/input/schema.json' });
+    const { args } = JSON.parse(await readFile(path.join(directory, 'command.json'), 'utf8')) as { args: string[] };
+    assert.equal(args[args.indexOf('--sandbox') + 1], 'read-only');
+    assert(!args.some(argument => argument.startsWith('sandbox_workspace_write.network_access=')));
+    assert.equal(args[args.indexOf('--image') + 1], '/input/reference.png');
+    assert.equal(args[args.indexOf('--output-schema') + 1], '/input/schema.json');
+  });
+});
+
 test('cancellation kills a TERM-resistant descendant after the CLI parent exits', { skip: process.platform === 'win32' }, async () => {
   await fakeCli(`
 const {spawn} = require('node:child_process');

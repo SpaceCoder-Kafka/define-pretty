@@ -135,10 +135,10 @@ export function featureSpecInstruction(spec: FeatureSpec): string {
 }
 
 export const SPEC_GUIDANCE = [
-  '数值规范使用 spec 结构化数据；同一份数据用于卡片、PNG 和实施指令。正文不要另写与表格冲突的值。basis 说明观察区域、截图缩放或估计依据。evidence="annotated" 仅用于图中明确标注的值；"estimated" 是观察估计；"suggested" 是迁移建议。不得把观察估计说成精确测量。缺乏依据时明确标为建议并在 basis 说明，不用“差不多”“大标题”等空泛词代替参数。',
+  '数值规范使用 spec 结构化数据；同一份数据用于卡片、PNG 和实施指令。正文不要另写与表格冲突的值。basis 说明观察区域、截图缩放或估计依据。evidence="annotated" 仅用于图中明确标注的值；"estimated" 是观察估计；"suggested" 是迁移建议。不得把观察估计说成精确测量；estimated 与 suggested 可在实施时结合原图及实际渲染校准，用户明确固定要求优先。缺乏依据时明确标为建议并在 basis 说明，不用“差不多”“大标题”等空泛词代替参数。',
   '字体 typography：列出可见文字层级，必须有唯一 role="body" 正文行作为比例基准，其他层级以相对正文大小保持关系。referenceWidth 是这些 px 数值对应的参考内容区宽度，不含图片外部展示边框；basis 说明基准。每行给出 fontFamily、fontEvidence、sizePx、weight、lineHeightPx、letterSpacingEm 和数值 evidence。无法确证字体名称时提供相近字体或字体类别，fontEvidence 标 suggested；不要假称识别到了原字体。若图片无可读文字，可以建议适配的文字层级，全部标 suggested 并明确说明。不得将缩放截图上的像素直接当成网页 CSS 尺寸。',
   '配色 palette：明确区分 page-background 页面背景、surface 内容容器表面、text-primary 主要文字、text-secondary 次要文字、accent 强调色、border 边框分隔、reference-backdrop 外部展示背景。必须有唯一页面背景与主要文字颜色，按画面实际需要增加其他行。hex 使用可执行的六位 HEX（#RRGGBB）；观察近似值标 estimated，不伪装为采样测量。usage 写清用途与作用区域，areaPercent 给可观察的面积占比，不可靠时为 null。外部展示背景不能自动迁移到页面背景；拍照的阴影和光照偏色不当作设计颜色。颜色分配与面积关系同样需要保留，不将所有组件平均染成强调色。',
   '布局配套 spacing：布局比例仍由 layout 的 proportions 表达；spec 补充页面内边距、栏间距、模块间距与对齐等可执行空间参数。每行 label/value/unit/reference/usage/evidence 完整；reference 明确 px 对应 referenceWidth、百分比的分母、rem 的根字号。不要用第二组数值改写 layout 中同一个分栏或间距约束；若表达同一距离，必须换算一致。',
-  '辨识特征 attributes：逐行写明 property/value/scope/evidence，例如边框 2px solid #111111、阴影偏移 6px 6px 且模糊 0、插画在主区域占宽约 20%。只规定该特征需要的参数与范围，避免覆盖基础规范的整页背景或文字层级。没有图中证据的交互状态不得作为观察事实。',
+  '辨识特征 attributes：逐行写明 property/value/scope/evidence，例如边框 2px solid #111111、阴影偏移 6px 6px 且模糊 0、插画在主区域占宽约 20%。可用 value 描述纹理、渐变、图片层和素材需求，不把表格当作实现技术的限制。只规定该特征需要的参数与范围，与相关基础规范协调，避免引入无关的整页修改。没有图中证据的交互状态不得作为观察事实。',
 ].join('\n');
 

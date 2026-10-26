@@ -134,7 +134,7 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
     const column = columns[0] <= columns[1] ? 0 : 1;
     card.x = margin + column * (cardWidth + gap); card.y = columns[column]; columns[column] += card.height + gap;
   }
-  const footerText = `${layoutSelected ? '按所选布局与应用范围重组内容；布局色块仅表示角色、比例与叠放，实际配色以所选配色表为准。' : '按内容用途迁移所选关系；未选布局卡片时不主动重排整页。'}区分图中标注、观察估计与迁移建议，不为套用特征新增业务模块。`;
+  const footerText = `${layoutSelected ? '按所选布局与应用范围重组内容；布局色块仅表示角色、比例与叠放，实际配色依据所选配色规则。' : '按内容用途迁移所选关系；未选布局卡片时不主动重排整页。'}请同时附上无标记原图与配套指令；原图仅补充已选特征的视觉依据。区分图中标注、观察估计与迁移建议，估计和建议值可按原图与实际效果校准；保留用户明确要求与业务功能。`;
   ctx.font = font(20); const footer = lines(ctx, footerText, width - margin * 2);
   const contentBottom = Math.max(...columns) - gap, height = contentBottom + 44 + footer.length * 28 + margin;
   canvas.width = width; canvas.height = height;
@@ -143,7 +143,7 @@ export async function exportFeatureBoard(board: FeatureBoard): Promise<{ blob: B
   ctx.font = font(40, 700); ctx.fillStyle = ink;
   const heading = lines(ctx, board.title, width - margin * 2); ctx.fillText(heading[0] + (heading.length > 1 ? '…' : ''), margin, 110);
   ctx.font = font(23); ctx.fillStyle = muted; ctx.fillText(`仅迁移编号 1–${selected.length} 的所选特征 · ${layoutSelected ? '按所选布局重组；遵守应用范围' : selected.some(card => card.kind === 'global') ? '整页风格协调' : '其余画面仅作上下文'} · 保留目标网页的业务内容与功能`, margin, 157);
-  ctx.font = font(19); ctx.fillText('实施顺序：一级基础规范 → 二级辨识特征 → 三级精细细节。仅采用已选卡片，数值依据与作用范围见表格。', margin, 193);
+  ctx.font = font(19); ctx.fillText('检查顺序：基础规范 → 辨识特征 → 精细细节。仅采用已选卡片，估计与建议值可校准；实现手段由模型选择。', margin, 193);
 
   const imageX = margin + (cardWidth - referenceImageWidth) / 2, imageY = startY + 70;
   rect(ctx, margin, startY, cardWidth, referenceHeight, 18, '#ffffff', '#dfe6e2');

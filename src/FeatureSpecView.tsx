@@ -2,8 +2,8 @@ import { evidenceLabels, specTable, tierLabels, type Evidence, type FeatureSpec,
 
 export { tierLabels };
 export const tierDescriptions: Record<FeatureTier, string> = {
-  foundation: '优先落实整体风格、文字、布局与配色',
-  signature: '在基础规范上保留这张图的辨识度',
+  foundation: '检查整体风格、文字、布局与配色关系',
+  signature: '保留这张图的辨识度，并协调基础规范',
   detail: '需要更高还原度时按需补充',
 };
 

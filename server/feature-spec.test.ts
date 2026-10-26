@@ -68,7 +68,7 @@ test('old cards retain readiness, selection and inferred tiers without inventing
   assert.equal(featureReady(card({ tier: 'signature', kind: 'local' })), false);
   assert.equal(featureReady(card({ tier: 'signature', kind: 'local', spec: attributes })), true);
 });
-test('only selected specs enter instructions and explicit priority governs scoped parameters', () => {
+test('only selected specs enter instructions with scope and evidence preserved for calibration', () => {
   const color = card({ tier: 'foundation', foundation: 'palette', kind: 'local', title: '配色与明暗分配', spec: parseFeatureSpec(palette) });
   const hidden = card({ id: 'hidden', tier: 'foundation', foundation: 'typography', kind: 'local', selected: false, spec: { ...typeSpec, basis: 'SECRET-TYPOGRAPHY-SPEC' } });
   const signature = card({ id: 'shadow', tier: 'signature', kind: 'local', spec: attributes });
@@ -76,12 +76,45 @@ test('only selected specs enter instructions and explicit priority governs scope
   assert(prompt.includes(JSON.stringify(color.spec)));
   assert(prompt.includes(JSON.stringify(attributes)));
   assert(!prompt.includes('SECRET-TYPOGRAPHY-SPEC'));
-  assert.match(prompt, /一级基础规范 > 二级辨识特征 > 三级精细细节/);
+  assert.match(prompt, /estimated.*观察估计/);
+  assert.match(prompt, /suggested.*迁移建议/);
+  assert.match(prompt, /可根据原图.*实际渲染校准/);
   assert.match(prompt, /未选中布局结构卡/);
   assert.match(prompt, /外部展示背景/);
   assert.match(prompt, /要求值、实际应用值/);
   assert.match(featureApplication(color), /^整页背景/);
   assert.match(featureApplication(hidden), /^整页文字/);
   assert.equal(featureApplication({ ...color, application: '仅文章区域' }), '仅文章区域');
+});
+
+test('explicit user requirements and mixed parameter evidence reach the model without rewriting the source', () => {
+  const spec: AttributeSpec = { kind: 'attributes', basis: '图中标注与观察分开记录', rows: [
+    { property: '描边', value: '2px', scope: '插画外轮廓', evidence: 'annotated' },
+    { property: '纸张纹理', value: '低对比纤维与细颗粒，可使用本地图片层', scope: '插画背景', evidence: 'estimated' },
+    { property: '图片格式', value: 'PNG 或 WebP', scope: '插画素材', evidence: 'suggested' },
+  ] };
+  const chosen = card({ tier: 'signature', kind: 'local', spec, application: '仅首屏插画；描边固定为 2px，不改变已有导航。' });
+  const input = board([chosen]);
+  const before = JSON.stringify(input);
+  const prompt = featureInstruction(input);
+  assert(prompt.includes(JSON.stringify(spec)));
+  assert(prompt.includes(chosen.application));
+  assert.match(prompt, /用户明确的应用区域、固定值及禁改要求优先/);
+  assert.match(prompt, /原图仅补充已选特征/);
+  assert.match(prompt, /适合生图时可直接调用/);
+  assert.equal(JSON.stringify(input), before);
+});
+
+test('legacy refinement describes only available visual inputs without expanding selected scope', () => {
+  const selected = card({ application: '仅主视觉插画，不修改导航。' });
+  const input = board([selected, card({ id: 'hidden', selected: false, instruction: 'UNSELECTED-DETAIL' })]);
+  const before = JSON.stringify(input);
+  const prompt = featureInstruction(input, { hasOriginalReference: false });
+  assert.match(prompt, /本次仅附所选卡片图/);
+  assert(!prompt.includes('第二张为无标记原图'));
+  assert(prompt.includes(selected.application));
+  assert(!prompt.includes('UNSELECTED-DETAIL'));
+  assert.match(prompt, /未选中布局结构卡/);
+  assert.equal(JSON.stringify(input), before);
 });
 

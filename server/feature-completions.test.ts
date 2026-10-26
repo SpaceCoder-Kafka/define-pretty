@@ -30,13 +30,14 @@ async function fixture(executor:Executor,timeout=1000){
 async function waitFor(check:()=>Promise<boolean>){for(let i=0;i<300;i++){if(await check())return;await new Promise(r=>setTimeout(r,5));}throw Error('did not finish');}
 
 test('completion uses unsaved intent and crop, returns only generated fields, and never overwrites the board',async()=>{
-  let prompt='';const f=await fixture(async options=>{prompt=options.prompt;assert.equal(options.readOnly,true);assert.equal(options.referenceFiles?.length,2);assert(options.referenceFiles![0].endsWith('crop.png'));const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));assert.deepEqual(schema.required,['description','effect','instruction','applicability']);assert.equal(schema.properties.layout,undefined);return {exitCode:0,summary:JSON.stringify({...result,title:'不要接受这个标题',region:{x:0,y:0,width:1,height:1},layout}),usage:{output_tokens:20}};});
+  let prompt='';const f=await fixture(async options=>{prompt=options.prompt;assert.equal(options.readOnly,true);assert.equal(options.referenceFiles?.length,2);assert(options.referenceFiles![0].endsWith('crop.png'));assert.deepEqual(await readFile(options.referenceFiles![1]),png);const schema=JSON.parse(await readFile(options.outputSchema!,'utf8'));assert.deepEqual(schema.required,['description','effect','instruction','applicability']);assert.equal(schema.properties.layout,undefined);return {exitCode:0,summary:JSON.stringify({...result,title:'不要接受这个标题',region:{x:0,y:0,width:1,height:1},layout}),usage:{output_tokens:20}};});
   try {
     const before=await readFile(path.join(f.boards.directory(f.board.id),'board.json'));
     const job=await f.jobs.start(f.board.id,f.input,config);await waitFor(async()=>(await f.jobs.get(job.id)).status==='completed');
     const done=await f.jobs.get(job.id);assert.deepEqual(done.result,result);assert.equal(done.title,f.input.title);assert.deepEqual(done.region,f.input.region);assert.deepEqual(f.crops,[f.input.region]);assert(prompt.includes(f.input.title));assert(prompt.includes('不改写用户标题'));
     assert.match(prompt, /布局关系的应用范围由内容用途和规则决定/);
     assert.match(prompt, /只借鉴字体、配色或装饰时，不附加整页重排要求/);
+    assert.match(prompt, /核对这张卡片的视觉细节，不扩展用户意图/);
     assert(!prompt.includes('不扩大为整页改造'));
     assert.deepEqual(await readFile(path.join(f.boards.directory(f.board.id),'board.json')),before);
     const restarted=new FeatureCompletions(f.boards,f.store);await restarted.initialize();assert.deepEqual((await restarted.get(job.id)).result,result);
