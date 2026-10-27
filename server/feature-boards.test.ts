@@ -79,6 +79,8 @@ test('real generation contract snapshots input and keeps old cards when starting
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
     assert.equal(input.cardFormat, 8); assert.equal(input.guidanceVersion, 14);
     assert(observedPrompt.includes(STYLE_TRANSFER_GUIDANCE));
+    assert.match(observedPrompt, /原图及局部裁片仅用于.*风格分析.*卡片示例或生图参考/);
+    assert.match(observedPrompt, /不得.*成品的人物、物体、装饰、背景或纹理/);
     const schema = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'schema.json'), 'utf8'));
     assert.deepEqual(schema.properties.cards.items.properties.tier.enum, ['foundation', 'signature']);
     assert.equal(board.cards[0].adaptation, ''); assert.equal(board.cards[0].instruction, modern.instruction);
@@ -131,6 +133,16 @@ test('transfer guidance survives saving and reaches selected instructions; legac
     const old = cardsInput([legacy])[0];
     assert.equal(old.instruction, legacy.instruction);
     assert.equal(old.adaptation, '');
+    const historical = cardsInput([{ ...legacy, title: '灰阶人物与像素电脑', description: '参考人物向左上仰头，三台旧电脑叠放。', instruction: '保留仰头胸像、CRT 电脑与虹彩盘片。', selected: true }])[0];
+    const saved = await f.boards.edit(persisted.id, { revision: persisted.revision, title: persisted.title, cards: [historical] });
+    const loaded = await f.boards.get(saved.id);
+    const prompt = featureInstruction(loaded);
+    assert.deepEqual(loaded.cards[0], historical, 'legacy observations remain available rather than being destructively rewritten');
+    assert(prompt.includes(historical.instruction));
+    assert.match(prompt, /卡片（包括历史卡片）.*默认是观察样本/);
+    assert.match(prompt, /未被用户明确要求保留时应提炼其表现方式，用于当前网站所需的内容/);
+    assert.match(prompt, /主体或构图因业务需要改变，不作为风格偏差/);
+    assert(prompt.indexOf(STYLE_TRANSFER_GUIDANCE) < prompt.indexOf(historical.instruction), 'current transfer policy precedes preserved legacy observations');
     assert.equal(cardsInput([{ ...generated, adaptation: undefined }], true)[0].adaptation, '');
     assert.throws(() => cardsInput([{ ...cards[0], effect: 'a'.repeat(161) }]));
   } finally { await f.cleanup(); }

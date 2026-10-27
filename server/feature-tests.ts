@@ -17,12 +17,12 @@ import { readDraftPreview } from './task-preview.ts';
 
 const activeStatus = (status: string) => ['queued','running','checking'].includes(status);
 const WEBSITE_WORKFLOW = `生成期间可联网查找或下载素材、安装依赖、构建和启动临时预览，并按实际截图自主对照、修正。浏览器连接器不可用时，可使用命令行无头浏览器等可用方式继续验证。
-允许并鼓励使用子代理并行处理独立任务，例如插画与素材、字体与资源准备、局部组件、只读验收。按实际任务决定是否拆分，最多同时使用 3 个子代理；主代理继续推进可独立完成的页面工作。明确每个子代理负责的文件与产物路径，共享设计方向和参考图位置，告知它们其他代理也在工作，不覆盖别人的修改；有依赖或共同编辑同一文件的步骤由主代理协调。主代理负责合并、整页视觉一致性与最终验收；合并前等待相关产物完成。所有代理沿用本次模型和推理强度。
-先检查已有 website/assets/、可用依赖和字体工具，适合时直接复用，避免重复下载或安装；确有缺少才准备依赖。不要让独立的素材下载、生图阻塞页面结构实现。尽早将完整页面写入 website/ 并运行 node preview.mjs，提供阶段预览，再合并素材和完善细节。阶段预览不代表最终验收通过。
+允许并鼓励使用子代理并行处理独立任务，例如插画与素材、字体与资源准备、局部组件、只读验收。按实际任务决定是否拆分，最多同时使用 3 个子代理；主代理继续推进可独立完成的页面工作。明确每个子代理负责的文件与产物路径，共享设计方向和参考图位置；向素材子代理同时交代目标业务用途、要借鉴的风格，以及参考图仅作风格依据、不得裁切照搬到成品的要求，用户明确要求复用的具体素材除外。告知它们其他代理也在工作，不覆盖别人的修改；有依赖或共同编辑同一文件的步骤由主代理协调。主代理负责合并、整页视觉一致性与最终验收；合并前等待相关产物完成，核对主要素材的来源和实际制作方式。所有代理沿用本次模型和推理强度。
+先检查已有 website/assets/、可用依赖和字体工具，核实素材来源与内容用途后，复用适用的目标网站业务素材和已独立创作的素材，避免重复下载或安装。对本轮修改范围内继承的参考图裁片，除非用户明确要求复用，均应替换为按目标内容重新创作的素材，并从交付副本移除不再使用的裁片；不能因其已在 assets/ 中或题材相关而直接沿用。确有缺少才准备依赖。不要让独立的素材下载、生图阻塞页面结构实现。尽早将完整页面写入 website/ 并运行 node preview.mjs，提供阶段预览，再合并素材和完善细节。阶段预览不代表最终验收通过。
 分文件、分批保存实现，避免一次生成巨大脚本后才尝试落盘。使用 apply_patch 时必须包含 *** Begin Patch 与 *** End Patch；写入后立即确认文件存在。遇到写入或工具错误，先用最小命令修复调用方式，再复用已有内容继续，不要原样重试或整段重新生成。只对当前文件范围执行必要的读取。
 首轮截图后优先修正最影响观感的具体差异并检查窄屏与关键交互；后续复查以尚未解决的问题为依据，已验证通过的内容不重复检查，除非后续修改影响它。出现等待、失败重试或阶段切换时，用简短进度说明已完成和正在处理的内容。交付时如实列出残余差距，保留视觉质量目标，不以耗时预算替代验收。
 ${TASK_PREVIEW_GUIDANCE}
-最终只在 website/ 下交付可直接加载的静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html；用户预览时无需安装或构建。生成图片和下载素材保存到 website/assets/，使用相对路径；依赖、构建源文件和临时产物放在 website/ 之外。允许通过 HTTPS 加载字体与字体样式表，其余资源保持本地化，不引入远程脚本或业务接口。隔离预览支持普通 SVG 图片；SVG sprite 请将 symbol 内联到当前 HTML，用 <use href="#id"> 引用，外链 <use href="assets/icons.svg#id"> 会受浏览器同源限制。预览环境不提供 localStorage，交互应实际可用。完成后简述交付和验证结果，未验证的部分如实说明。`;
+最终只在 website/ 下交付可直接加载的静态 HTML、CSS、JavaScript 和本地资源，入口为 website/index.html；用户预览时无需安装或构建。生成图片和下载素材保存到 website/assets/，使用相对路径；依赖、构建源文件和临时产物放在 website/ 之外。允许通过 HTTPS 加载字体与字体样式表，其余资源保持本地化，不引入远程脚本或业务接口。隔离预览支持普通 SVG 图片；SVG sprite 请将 symbol 内联到当前 HTML，用 <use href="#id"> 引用，外链 <use href="assets/icons.svg#id"> 会受浏览器同源限制。预览环境不提供 localStorage，交互应实际可用。完成后简述交付和验证结果，逐项列明主要素材的文件、用途、来源及实际制作方式，未验证的部分如实说明。`;
 function referenceInputGuidance(originalReference?: FeatureTest['originalReference']) {
   return `任务的只读视觉输入位于工作目录之外：所选卡片导出图为 ../reference.png。${originalReference
     ? `无标记原图为 ../${originalReference.filename}；需要生成或编辑素材时，可将这个原图路径作为风格参考输入，并明确目标网站所需的新内容，不默认复刻图中主体。`
@@ -330,7 +330,7 @@ export class FeatureTests {
       await cp(parentWebsite,this.websiteDirectory(id),{recursive:true});
       if(await hashWebsite(parentWebsite)!==parentArtifactHash || await hashWebsite(this.websiteDirectory(id))!==parentArtifactHash) fail('父测试产物在复制期间发生变化，请重试。',409);
       const history=previousFeedback.length?`\n\n此前已接受的优化要求（按旧到新排列）：\n已满足的要求继续保持；本轮有明确变更时，本轮要求优先。\n${previousFeedback.map((value,index)=>`第 ${index+1} 轮：\n${value}`).join('\n\n')}`:'';
-      const prompt=`website/ 中是上一轮测试产物的独立副本。请根据本次反馈提高所选风格的一致性与素材对当前网站的适用性，保留已实现的有效效果、真实业务内容、数据和交互；仅修改当前副本。对已选特征及应用范围内需要调整的素材，若其照搬参考图题材却不符合当前模块用途，应按同一风格重新创作，用户明确要求保留的内容优先。沿用下面冻结的卡片选择与应用范围，未选特征不成为新增要求。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}${history}\n\n本次继续优化反馈：\n${feedback}\n\n${featureInstruction(board,{hasOriginalReference:!!originalReference})}`;
+      const prompt=`website/ 中是上一轮测试产物的独立副本。请根据本次反馈提高所选风格的一致性与素材对当前网站的适用性，保留已实现的有效效果、真实业务内容、数据和交互；仅修改当前副本。检查已选特征、应用范围及本轮反馈所涉及的继承素材：未经用户明确要求复用的参考图裁片必须替换，即使题材与模块相关；照搬参考题材而不符合当前模块用途的素材也应按同一风格重新创作。用户明确要求保留的内容优先。沿用下面冻结的卡片选择与应用范围，未选特征不成为新增要求。\n${WEBSITE_WORKFLOW}\n${referenceInputGuidance(originalReference)}${history}\n\n本次继续优化反馈：\n${feedback}\n\n${featureInstruction(board,{hasOriginalReference:!!originalReference})}`;
       const run: FeatureTest={id,boardId:parent.boardId,boardRevision:parent.boardRevision,board,source,config,prompt,imageHash:parent.imageHash,originalReference,
         refinement:{parentTestId:parent.id,parentArtifactHash,feedback},createdAt:new Date().toISOString(),status:'running',hasPreview:false};
       await writeFile(path.join(dir,'reference.png'),image,{flag:'wx',mode:0o600});

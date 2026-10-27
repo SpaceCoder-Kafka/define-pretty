@@ -30,6 +30,16 @@ async function fixture(executor?:Executor, timeout=1000) {
   return {dir,main,html,hash,board,boards,store,tests,cleanup:async()=>{await tests.shutdown();await boards.shutdown();await rm(dir,{recursive:true,force:true});}};
 }
 async function done(fn:()=>Promise<boolean>){for(let i=0;i<200;i++){if(await fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('did not finish');}
+function assertAssetTransferPolicy(prompt: string) {
+  assert.match(prompt, /原图及局部裁片仅用于.*风格分析.*测量.*生图参考/);
+  assert.match(prompt, /除非用户明确要求复用参考图中的具体素材.*不得.*成品的人物、物体、装饰、背景或纹理/);
+  assert.match(prompt, /抠图、换色、缩放.*不算重新创作/);
+  assert.match(prompt, /工具不可用或调用失败.*不得退回参考图裁片/);
+  assert.match(prompt, /向素材子代理.*目标业务用途.*参考图仅作风格依据、不得裁切照搬/);
+  assert.match(prompt, /核实素材来源与内容用途后.*复用适用的目标网站业务素材/);
+  assert.match(prompt, /继承的参考图裁片.*替换.*交付副本移除/);
+  assert.match(prompt, /逐项列明主要素材的文件、用途、来源及实际制作方式/);
+}
 test('selected palette parameters and evidence reach one implementation call without unselected specs or layout authority', async () => {
   const palette: PaletteSpec = { kind: 'palette', basis: '页面区域观察估计', colors: [
     { role: 'page-background', label: '纸面', hex: '#FAF9F3', usage: '整页内容底色', areaPercent: 80, evidence: 'estimated' },
@@ -133,6 +143,9 @@ test('freezes distinct card and original images in order and rejects changed ori
     assert.deepEqual(await readFile(options.referenceFiles![1]),png);
     for (const file of options.referenceFiles!) assert(!file.startsWith(options.cwd+path.sep));
     assert(options.prompt.includes(STYLE_TRANSFER_GUIDANCE));
+    assertAssetTransferPolicy(options.prompt);
+    assert.equal(await readFile(path.join(options.cwd,'../prompt.txt'),'utf8'),options.prompt);
+    assert.equal(JSON.parse(await readFile(path.join(options.cwd,'../input.json'),'utf8')).prompt,options.prompt);
     assert.match(options.prompt,/第二张.*无标记原图/);
     assert.match(options.prompt,/不扩大修改范围/);
     assert.match(options.prompt,/安装依赖、构建/);
@@ -541,6 +554,9 @@ test('sandboxed SVG sprites receive one actionable diagnosis while inline symbol
 
 test('refinement continues a failed result in isolation with frozen selection, inputs and original comparison source',async()=>{
   const cardImage=Buffer.concat([png,Buffer.from('frozen-selection')]);
+  const inheritedCrop=Buffer.concat([png,Buffer.from('reference-crop')]);
+  const businessAsset=Buffer.concat([png,Buffer.from('business-product')]);
+  const replacement=Buffer.concat([png,Buffer.from('new-artwork')]);
   const seen:string[]=[];
   let calls=0;
   const f=await fixture(async options=>{
@@ -552,6 +568,7 @@ test('refinement continues a failed result in isolation with frozen selection, i
     assert(options.prompt.includes('../reference.png'));
     assert(options.prompt.includes('../original-reference.png'));
     assert(options.prompt.includes(STYLE_TRANSFER_GUIDANCE));
+    assertAssetTransferPolicy(options.prompt);
     assert(!options.prompt.includes('不要发送这条规范'));
     const input=JSON.parse(await readFile(path.join(options.cwd,'../input.json'),'utf8'));
     assert.equal(input.prompt,options.prompt);
@@ -560,6 +577,15 @@ test('refinement continues a failed result in isolation with frozen selection, i
       assert(options.prompt.includes('调整插画的线条细节，保持标题已实现的尺寸'));
       assert(options.prompt.includes('应用区域：任务区'));
       assert(!options.prompt.includes('后续编辑新增的要求'));
+      assert.match(options.prompt,/未经用户明确要求复用的参考图裁片必须替换，即使题材与模块相关/);
+      assert.deepEqual(await readFile(path.join(options.cwd,'website/assets/reference-crop.png')),inheritedCrop);
+      assert.deepEqual(await readFile(path.join(options.cwd,'website/assets/business.png')),businessAsset);
+      await rm(path.join(options.cwd,'website/assets/reference-crop.png'));
+      await writeFile(path.join(options.cwd,'website/assets/new-artwork.png'),replacement);
+    } else {
+      await mkdir(path.join(options.cwd,'website/assets'),{recursive:true});
+      await writeFile(path.join(options.cwd,'website/assets/reference-crop.png'),inheritedCrop);
+      await writeFile(path.join(options.cwd,'website/assets/business.png'),businessAsset);
     }
     await writeFile(path.join(options.cwd,'website/index.html'),calls===1?'<h1>上轮已生成的产物</h1>':'<h1>继续优化后的产物</h1>');
     return calls===1?{exitCode:1,error:'model capacity',summary:'未完成'}:{exitCode:0};
@@ -584,6 +610,10 @@ test('refinement continues a failed result in isolation with frozen selection, i
     assert.deepEqual(result.refinement,{parentTestId:parent.id,parentArtifactHash:parentHash,feedback:'调整插画的线条细节，保持标题已实现的尺寸'});
     assert.deepEqual(seen,['<h1>原始业务内容</h1>','<h1>上轮已生成的产物</h1>']);
     assert.equal(await hashWebsite(f.tests.websiteDirectory(parent.id)),parentHash);
+    assert.deepEqual(await readFile(path.join(f.tests.websiteDirectory(parent.id),'assets/reference-crop.png')),inheritedCrop);
+    assert.deepEqual(await readFile(path.join(f.tests.websiteDirectory(child.id),'assets/new-artwork.png')),replacement);
+    assert.deepEqual(await readFile(path.join(f.tests.websiteDirectory(child.id),'assets/business.png')),businessAsset);
+    await assert.rejects(readFile(path.join(f.tests.websiteDirectory(child.id),'assets/reference-crop.png')),{code:'ENOENT'});
     assert.deepEqual(await readFile(path.join(f.tests.directory(parent.id),'run.json')),parentRecord);
     assert.equal(await hashWebsite(f.tests.sourceDirectory(result.source.runId)),f.hash);
     assert.equal((await f.tests.list()).length,2);
