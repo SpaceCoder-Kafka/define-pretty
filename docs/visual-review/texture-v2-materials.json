@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "path": "public/assets/paper/page-paper-v2.webp",
+      "source": "image_gen.imagegen",
+      "original": "/Users/kafka/.codex/generated_images/01a17cd6-218f-7291-8f39-62f90087ceb1/exec-ae16958e-ae72-4fb3-8e0f-4aa0a939b5c6.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "cssTilePixels": 820,
+      "bytes": 533234,
+      "sha256": "c5f476dccd0ed504b09fed0cbc79ce640a00f094a4fd7b5333e1c896d0324d0d",
+      "referenceRole": "style reference only; independent generated material, no reused reference pixels"
+    },
+    {
+      "path": "public/assets/paper/card-paper-v2.webp",
+      "source": "image_gen.imagegen",
+      "original": "/Users/kafka/.codex/generated_images/01a17cd6-218f-7291-8f39-62f90087ceb1/exec-ba51f6be-c50e-41f1-971b-32b360256192.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "cssTilePixels": [
+        575,
+        610,
+        650
+      ],
+      "bytes": 540976,
+      "sha256": "df87f55f1b03e0ddb3738ec35cfc4be9d65d83da2e87ccc11864f1a6f5c6e262",
+      "referenceRole": "style reference only; independent generated material, no reused reference pixels"
+    }
+  ],
+  "validation": "npm run build and browser smoke passed; desktop and mobile screenshots opened and visually checked"
+}

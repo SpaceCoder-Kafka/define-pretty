@@ -1,0 +1,37 @@
+{
+  "files": [
+    {
+      "file": "page-paper-v3.webp",
+      "original": "exec-07febd3b-e481-41dc-a844-d484e91cfd2e.png",
+      "bytes": 362874,
+      "sha256": "3d50044cb6f6a1fc5905efb9e16c57fdfa8bc3f4e1d3034d3fd1d9d2b804f772",
+      "generationTool": "image_gen.imagegen",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "referenceRole": "style only; no reference pixels reused"
+    },
+    {
+      "file": "card-paper-v3.webp",
+      "original": "exec-deccf129-8762-46fb-9d22-54eb8f342f17.png",
+      "bytes": 311882,
+      "sha256": "6ca22cb17d6d2f852f40c101b54c6a621ec77f5154ed8c64767e3669e67372dd",
+      "generationTool": "image_gen.imagegen",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "referenceRole": "style only; no reference pixels reused"
+    }
+  ],
+  "checkedWidths": [
+    360,
+    390,
+    768,
+    1440
+  ],
+  "errors": [],
+  "visualCheck": "Desktop page, desktop cards, and 390px cards opened and observed",
+  "build": "passed"
+}

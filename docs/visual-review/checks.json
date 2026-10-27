@@ -1,0 +1,90 @@
+{
+  "origin": "http://127.0.0.1:4293",
+  "checks": [
+    "Local Noto font loaded and actually renders the Chinese heading",
+    "Settings opens and closes with Escape",
+    "Card selection persists and restores the original selection",
+    "Card editor saves the existing rules and closes",
+    "Original reference preview opens with the original image",
+    "Copy instruction writes the selected feature instructions",
+    "Selected feature overview renders and downloads as PNG",
+    "Source picker shows all 8 functional built-in sources without changing the selection",
+    "Upload entry opens an image file chooser (no upload or AI job submitted)",
+    "360 / 390 / 768 / 1024 / 1440px layouts have no document overflow",
+    "Empty upload state renders (read-only empty board fixture)"
+  ],
+  "errors": [],
+  "failedRequests": [],
+  "platformFonts": [
+    {
+      "familyName": "Noto Sans SC Thin",
+      "postScriptName": "NotoSansSC-Thin_Black",
+      "isCustomFont": true,
+      "glyphCount": 11
+    }
+  ],
+  "typography": {
+    "h1": {
+      "size": "59.76px",
+      "weight": "900",
+      "lineHeight": "66.9312px",
+      "family": "Arial, \"Pretty Noto\", sans-serif"
+    },
+    ".feature-intro p": {
+      "size": "18px",
+      "weight": "400",
+      "lineHeight": "29.7px",
+      "family": "Arial, \"Pretty Noto\", sans-serif"
+    },
+    ".feature-validation h2": {
+      "size": "28px",
+      "weight": "700",
+      "lineHeight": "36.4px",
+      "family": "Arial, \"Pretty Noto\", sans-serif"
+    },
+    ".feature-button": {
+      "size": "14px",
+      "weight": "500",
+      "lineHeight": "20px",
+      "family": "Arial, \"Pretty Noto\", sans-serif"
+    }
+  },
+  "palette": {
+    "background": "rgb(243, 240, 232)",
+    "ink": "rgb(43, 45, 48)",
+    "board": "rgb(84, 137, 167)"
+  },
+  "tape": {
+    "width": "73.1406px",
+    "height": "42px",
+    "cardWidth": 418,
+    "cardHeight": 656,
+    "transform": "matrix(0.996195, -0.0871557, 0.0871557, 0.996195, 0, 0)"
+  },
+  "viewports": [
+    {
+      "viewport": 360,
+      "document": 360
+    },
+    {
+      "viewport": 390,
+      "document": 390
+    },
+    {
+      "viewport": 768,
+      "document": 768
+    },
+    {
+      "viewport": 1024,
+      "document": 1024
+    },
+    {
+      "viewport": 1440,
+      "document": 1440
+    }
+  ],
+  "unverified": [
+    "Live paid AI generation and completion were not started",
+    "Actual new image upload was not submitted"
+  ]
+}

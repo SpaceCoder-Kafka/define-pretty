@@ -1,0 +1,14 @@
+Tool: built-in image_gen.imagegen
+Reference image: /var/folders/c_/cgmckt5j4s3gq56c38qfndcc0000gn/T/codex-clipboard-c6c382c6-31f8-4d04-a760-2b5cc6015d48.jpg
+Reference role: STYLE ONLY. Not a source of final pixels or a request to retain its subjects.
+Transparent background: false
+
+Use case: illustration-story. Create an ORIGINAL finished web illustration for Define Pretty, a tool for selecting visual design features from references. Input image is STYLE REFERENCE ONLY: borrow its coarse handmade paper pulp, ragged torn fibers, matte diffuse surface, short contact shadows, chunky rounded imperfect silhouettes and sparse charcoal details. Do NOT copy any reference pixels, character, face, body, pose, lightbulb, calendar, envelope, logo, or website composition. Subject and composition: a close-up physical designer's sample board, a large irregular rounded BLUE paper color swatch (dominant 55%) layered behind a small warm ivory paper sheet containing three simple tactile color chips (ochre, sage, muted blue) and one chunky charcoal checkmark, plus an offset ivory rounded viewfinder frame overlapping the blue paper, suggesting selecting and collecting a visual detail. One small ochre paper disk partially tucked behind. Not a product screenshot, no text, no letters, no numbers, no face, no human. Sparse quiet color areas. Broad blunt shapes, slight asymmetry, shallow frontal perspective, extremely realistic visible coarse matted fibers and clusters of pulp like the reference, narrow soft shadows at edges. Wide landscape composition, all objects contained in central 85%, warm white #F3F0E8 paper background. Blue #5489A7, ivory #F8F6EF, ochre #DDAA3F, sage #63735F, charcoal #2B2D30. This illustration will sit at the right of a Chinese workspace introduction, approx 420 x 250 CSS pixels; prioritize tactile finish and instantly legible simple visual-design sampling metaphor. No interface chrome or typography.
+
+Actual original output:
+/Users/kafka/.codex/generated_images/01a17cd6-218f-7291-8f39-62f90087ceb1/exec-fff7a892-8702-4d0a-872a-7783a75ff7a7.png
+1625 x 968 PNG.
+
+Production file:
+public/assets/paper/visual-sampling.webp
+1100 x 655; equal-proportion resize and WebP compression (quality 88), no subject edits.
