@@ -64,9 +64,9 @@ export function fitLayoutBlockLabel(diagram: Diagram, index: number, proportion:
   return center ? { rows: [String(index + 1)], center, numbered: true } : undefined;
 }
 
-export default function LayoutDiagram({ diagram, label = '布局结构示意' }: { diagram: Diagram; label?: string }) {
+export default function LayoutDiagram({ diagram, label = '布局结构示意', compact = false }: { diagram: Diagram; label?: string; compact?: boolean }) {
   const resolved = resolveLayoutDiagram(diagram), notes = getLayoutProportionNotes(diagram);
-  const diagramHeight = resolved.aspectRatio < 1 ? 200 : 160;
+  const diagramHeight = compact ? 104 : resolved.aspectRatio < 1 ? 200 : 160;
   const proportions = resolved.blocks.map((_, index) => blockProportionLabel(diagram, index));
   const canvas = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -77,7 +77,11 @@ export default function LayoutDiagram({ diagram, label = '布局结构示意' }:
     return () => observer.disconnect();
   }, []);
   const description = `${label}：${resolved.blocks.map((block, index) => `${index + 1}，${layoutRoleLabels[block.role]}，${block.label}，${proportions[index]}`).join('；')}。${notes.join('；')}。比例为观察估计。`;
-  return <figure className="feature-layout-diagram">
+  const compactBasis = '观察估计；' + (diagram.proportions?.length ? [
+    diagram.proportions.some(proportion => proportion.type === 'split') ? '分栏按所属区域扣除间距后的宽高' : '',
+    diagram.proportions.some(proportion => proportion.type === 'relative') ? '浮层尺寸相对参考块' : '',
+  ].filter(Boolean).join('；') : '宽高以示意画布为基准') + '。色块仅区分角色。';
+  return <figure className={`feature-layout-diagram${compact ? ' is-compact' : ''}`}>
     <div className="feature-layout-diagram-stage" style={{ height: diagramHeight }}>
       <div ref={canvas} className="feature-layout-diagram-canvas" role="img" aria-label={description} style={{ aspectRatio: resolved.aspectRatio, width: `min(100%, ${diagramHeight * resolved.aspectRatio}px)` }}>
         {resolved.blocks.map((block, index) => {
@@ -94,12 +98,12 @@ export default function LayoutDiagram({ diagram, label = '布局结构示意' }:
       </div>
     </div>
     <figcaption>
-      <p className="feature-layout-estimate">比例为观察估计 · 颜色区分角色</p>
-      <ol className="feature-layout-legend">{resolved.blocks.map((block, index) => <li key={index}>
+      <p className="feature-layout-estimate">{compact ? compactBasis : '比例为观察估计 · 颜色区分角色'}</p>
+      {!compact && <ol className="feature-layout-legend">{resolved.blocks.map((block, index) => <li key={index}>
         <span className="feature-layout-legend-number" style={{ background: layoutPalette[block.role].fill, color: layoutPalette[block.role].text, borderColor: layoutPalette[block.role].stroke }}>{index + 1}</span>
         <span><strong>{block.label}</strong><span>{layoutRoleLabels[block.role]} · {proportions[index]}</span></span>
-      </li>)}</ol>
-      {notes.length > 0 && <div className="feature-layout-proportions"><strong>比例基准</strong><ul>{notes.map((note, index) => <li key={index}>{note}</li>)}</ul></div>}
+      </li>)}</ol>}
+      {!compact && notes.length > 0 && <div className="feature-layout-proportions"><strong>比例基准</strong><ul>{notes.map((note, index) => <li key={index}>{note}</li>)}</ul></div>}
     </figcaption>
   </figure>;
 }
