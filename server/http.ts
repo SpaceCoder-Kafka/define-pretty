@@ -23,6 +23,7 @@ export interface AppOptions {
   featureBoards?: FeatureBoards; featureTests?: FeatureTests; featureCompletions?: FeatureCompletions;
   store: FileStore; consolePort: number; previewOrigin: string;
   config: Bootstrap['defaults']['config']; runtime: Bootstrap['runtime']; token?: string;
+  models?: Bootstrap['models']; modelCatalogError?: string;
 }
 
 export function createApp(options: AppOptions): Express {
@@ -41,7 +42,7 @@ export function createApp(options: AppOptions): Express {
   app.get('/api/feature-source-runs', async (_req,res) => res.json(await tests().listSourceRuns()));
   app.post('/api/feature-source-runs', async (req,res) => {
     if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
-    res.status(202).json(await tests().generateSource(text(req.body?.requirements,'网页需求',12000),modelInput(req.body?.config,config)));
+    res.status(202).json(await tests().generateSource(text(req.body?.requirements,'网页需求',12000),modelInput(req.body?.config,config,options.models)));
   });
   app.post('/api/feature-source-runs/:id/cancel', async (req,res) => res.json(await tests().cancelSource(requireSafeId(req.params.id))));
   app.get('/api/feature-tests', async (req,res) => res.json(await tests().list(req.query.boardId ? requireSafeId(req.query.boardId) : undefined)));
@@ -50,14 +51,14 @@ export function createApp(options: AppOptions): Express {
     if (!req.file) fail('缺少所选卡片的导出图片。');
     let supplied; try { supplied=JSON.parse(req.body?.config || '{}'); } catch { fail('测试模型配置无效。'); }
     const revision=Number(req.body?.revision); if(!Number.isSafeInteger(revision) || revision<1) fail('卡片版本无效。');
-    res.status(202).json(await tests().start(requireSafeId(req.body?.boardId),revision,req.file!.buffer,modelInput(supplied,config),req.body?.sourceId ? requireSafeId(req.body.sourceId) : undefined));
+    res.status(202).json(await tests().start(requireSafeId(req.body?.boardId),revision,req.file!.buffer,modelInput(supplied,config,options.models),req.body?.sourceId ? requireSafeId(req.body.sourceId) : undefined));
   });
   app.get('/api/feature-tests/:id', async (req,res) => res.json(await tests().get(requireSafeId(req.params.id))));
   app.post('/api/feature-tests/:id/refine', async (req,res) => {
     if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
     const id=requireSafeId(req.params.id), parent=await tests().get(id);
     const defaults={...parent.config,cliVersion:config.cliVersion};
-    res.status(202).json(await tests().refine(id,text(req.body?.feedback,'继续优化要求',4000),modelInput(req.body?.config,defaults)));
+    res.status(202).json(await tests().refine(id,text(req.body?.feedback,'继续优化要求',4000),modelInput(req.body?.config,defaults,options.models)));
   });
   app.post('/api/feature-tests/:id/cancel', async (req,res) => res.json(await tests().cancel(requireSafeId(req.params.id))));
   app.get('/api/feature-tests/:id/image', async (req,res) => { const id=requireSafeId(req.params.id); await tests().get(id); res.type('png').sendFile(path.join(tests().directory(id),'reference.png'),{dotfiles:'allow'}); });
@@ -70,12 +71,12 @@ export function createApp(options: AppOptions): Express {
   const completions = () => { if(!options.featureCompletions)fail('卡片补全尚未启用。',503);return options.featureCompletions!; };
   app.post('/api/feature-boards/:id/complete-card', async (req,res) => {
     if(!runtime.codexAvailable||!runtime.authenticated)fail('Codex 不可用或尚未登录。',503);
-    res.status(202).json(await completions().start(requireSafeId(req.params.id),req.body ?? {},modelInput(req.body?.config,config)));
+    res.status(202).json(await completions().start(requireSafeId(req.params.id),req.body ?? {},modelInput(req.body?.config,config,options.models)));
   });
   app.get('/api/feature-completions/:id',async (req,res)=>res.json(await completions().get(requireSafeId(req.params.id))));
   app.post('/api/feature-completions/:id/cancel',async (req,res)=>res.json(await completions().cancel(requireSafeId(req.params.id))));
   app.get('/api/feature-boards', async (_req, res) => { res.json(await boards().list()); });
-  app.post('/api/feature-boards', async (req, res) => { res.status(201).json(await boards().create(requireSafeId(req.body?.referenceId), modelInput(req.body?.config, config), text(req.body?.title, '特征板名称', 100))); });
+  app.post('/api/feature-boards', async (req, res) => { res.status(201).json(await boards().create(requireSafeId(req.body?.referenceId), modelInput(req.body?.config, config, options.models), text(req.body?.title, '特征板名称', 100))); });
   app.get('/api/feature-boards/:id', async (req, res) => { res.json(await boards().get(requireSafeId(req.params.id))); });
   app.put('/api/feature-boards/:id', async (req, res) => { res.json(await boards().edit(requireSafeId(req.params.id), req.body ?? {})); });
   app.post('/api/feature-boards/:id/generate', async (req, res) => {
@@ -85,7 +86,7 @@ export function createApp(options: AppOptions): Express {
   app.post('/api/feature-boards/:id/discover-details', async (req,res) => {
     if (!runtime.codexAvailable || !runtime.authenticated) fail('Codex 不可用或尚未登录。',503);
     const revision=req.body?.revision;if(!Number.isSafeInteger(revision)||revision<1)fail('卡片版本无效。');
-    res.status(202).json(await boards().generate(requireSafeId(req.params.id),{revision,config:modelInput(req.body?.config,config)}));
+    res.status(202).json(await boards().generate(requireSafeId(req.params.id),{revision,config:modelInput(req.body?.config,config,options.models)}));
   });
   app.post('/api/feature-boards/:id/cancel', async (req, res) => { res.json(await boards().cancel(requireSafeId(req.params.id))); });
   app.get('/api/feature-boards/:id/evidence', async (req, res) => {
@@ -95,7 +96,7 @@ export function createApp(options: AppOptions): Express {
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/bootstrap', (_req, res) => {
-    const body: Bootstrap = { token, previewOrigin, runtime, defaults: { config } };
+    const body: Bootstrap = { token, previewOrigin, runtime, defaults: { config }, models: options.models ?? [], modelCatalogError: options.modelCatalogError };
     res.json(body);
   });
   app.post('/api/references', upload.single('file'), async (req, res) => {

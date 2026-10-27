@@ -8,6 +8,8 @@ import type { DraftPreview, ExecutionProgress } from '../shared/execution-progre
 import { api, errorMessage } from './api';
 import { exportFeatureBoard } from './feature-export';
 import FullscreenPreview from './FullscreenPreview';
+import ModelSettings from './ModelSettings';
+import { resolveModelConfig } from '../shared/model-options';
 
 const isActive = (run?: {status: string}) => !!run && ['queued','running','checking'].includes(run.status);
 const labels: Record<string,string> = {queued:'等待中',running:'Codex 修改中',checking:'检查网页加载',completed:'已完成',failed:'失败',cancelled:'已取消',interrupted:'已中断'};
@@ -30,7 +32,7 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
     else localStorage.removeItem('pretty-source-builtin');
   },[sourceId,source?.builtin?.slug]);
   useEffect(()=>{ if(!bootstrap)return; let live=true;
-    setConfig({ ...bootstrap.defaults.config, model: 'gpt-6.1-sol', reasoningEffort: 'medium' });
+    setConfig(resolveModelConfig({ ...bootstrap.defaults.config, reasoningEffort: 'medium' }, bootstrap.models || []));
     const refresh=async()=>{
       const [available,jobs]=await Promise.all([api<FeatureTestSource[]>('/feature-tests/sources'),api<FeatureSourceRun[]>('/feature-source-runs')]);
       if(!live)return;
@@ -89,7 +91,7 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
   function chooseSource(id:string) {previewChosen.current=true;setSourceId(id);setSelectedId('');}
   function chooseHistory(id:string) {previewChosen.current=true;setSelectedId(id);}
   const refinementUsesSavedInput=!!current&&((board?.id!==current.boardId || board?.revision!==current.boardRevision)||(!!source&&source.runId!==current.source.runId));
-  return {sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,refine,refinementUsesSavedInput,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
+  return {models:bootstrap?.models || [],localModel:bootstrap?.defaults.config.model,modelCatalogError:bootstrap?.modelCatalogError,sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,refine,refinementUsesSavedInput,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
 }
 type State=ReturnType<typeof useFeatureTests>;
 type ProgressRun = { id:string; status:string; createdAt:string; finishedAt?:string; elapsedMs?:number; progress?:ExecutionProgress; draftPreview?:DraftPreview };
@@ -199,7 +201,7 @@ function SourcePicker({state,onClose}: {state:State;onClose:()=>void}) {
           <label htmlFor="source-requirements"><strong>描述你的网页需求</strong></label>
           <p>Codex 会根据需求生成页面，完成后自动设为原网页，再应用你选中的设计特征。</p>
           <textarea id="source-requirements" rows={3} maxLength={12000} value={state.requirements} onChange={e=>state.setRequirements(e.target.value)} placeholder="例如：生成一个中文个人博客，包含作者介绍、文章列表、分类筛选和文章详情；或制作一个产品设计师的个人简历页。"/>
-          {config&&<div className="feature-test-controls"><label>生成模型<input value={config.model} disabled={state.busy||state.running} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy||state.running} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>与测试模型共用设置</span></div>}
+          {config&&<div className="feature-test-controls"><ModelSettings config={config} models={state.models} localModel={state.localModel} error={state.modelCatalogError} onChange={state.setConfig} modelLabel="生成模型" disabled={state.busy||state.running}/><span>与测试模型共用设置</span></div>}
           <div className="feature-source-actions"><button className="feature-button primary" disabled={!state.requirements.trim()||state.busy||state.running||!state.authenticated||!config} onClick={()=>void state.generateSource()}>{state.sourceRunning?<LoaderCircle className="spin" size={16}/>:null}{state.sourceRunning?'原网页生成中…':'生成原始网页'}</button><span>最长 30 分钟 · 关闭弹窗后继续生成</span></div>
           {sourceJob&&<><div className="feature-source-job" role="status"><span>{isActive(sourceJob)?'原网页生成中':labels[sourceJob.status]} · {sourceJob.requirements.slice(0,60)}{sourceJob.error&&`：${sourceJob.error}`}</span>{isActive(sourceJob)&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancelSource(sourceJob.id)}>取消生成</button>}</div><RunProgress run={sourceJob}/></>}
           {sourceJob?.draftPreview&&<GeneratedWebsite run={sourceJob} name={isActive(sourceJob)?'生成中的原网页':'生成的原网页'} baseUrl={`${state.origin}/feature-tests/source-runs/${sourceJob.id}/index.html`} finalReady={['checking','completed'].includes(sourceJob.status)} empty="首个可预览版本完成后会显示在这里。"/>}
@@ -223,7 +225,7 @@ export default function FeatureValidation({state}: {state:State}) {
   return <section className="feature-validation" id="original-websites" ref={state.section}>
     <div className="feature-validation-head"><div><h2><FlaskConical size={20}/>验证所选设计</h2><p>从冻结的原网页开始，借鉴所选特征的风格，为当前网站创作素材；可按反馈继续优化。</p></div><span>统一视口 · 1440 × 1000</span></div>
     {original&&<p className="feature-test-source">{current?'本次历史对比的原网页':'当前原网页'}：{original.title} · {original.builtin?'内置网页':new Date(original.createdAt).toLocaleString('zh-CN')} · 已冻结副本{current&&source&&source.runId!==original.runId?`（下一次测试将使用「${source.title}」）`:''}</p>}
-    <div className="feature-test-controls">{config&&<><label>测试模型<input value={config.model} disabled={state.busy} onChange={e=>state.setConfig({...config,model:e.target.value})}/></label><label>推理强度<select value={config.reasoningEffort} disabled={state.busy} onChange={e=>state.setConfig({...config,reasoningEffort:e.target.value})}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(value=><option key={value}>{value}</option>)}</select></label><span>用于生成原网页、测试与继续优化 · 与卡片生成配置独立</span></>}
+    <div className="feature-test-controls">{config&&<><ModelSettings config={config} models={state.models} localModel={state.localModel} error={state.modelCatalogError} onChange={state.setConfig} modelLabel="测试模型" disabled={state.busy}/><span>用于生成原网页、测试与继续优化 · 与卡片生成配置独立</span></>}
     {state.runs.length>0&&<label className="feature-test-history">测试历史<select value={state.selectedId} onChange={e=>state.setSelectedId(e.target.value)}><option value="">当前原网页 · 尚未选择测试结果</option>{state.runs.map((r,i)=><option key={r.id} value={r.id}>第 {state.runs.length-i} 次 · {new Date(r.createdAt).toLocaleTimeString('zh-CN')} · {labels[r.status]}</option>)}</select></label>}</div>
     {state.error&&<div className="feature-alert" role="alert">{state.error}</div>}
     {current&&<div className="feature-test-state"><div>{isActive(current)&&<LoaderCircle className="spin" size={16}/>}<strong>{labels[current.status]}</strong><span>{current.config.model} · {current.config.reasoningEffort} · {selectedFeatures(current.board).map(c=>c.title).join(' / ')}</span></div>{isActive(current)&&<button className="feature-button" disabled={state.busy} onClick={()=>void state.cancel()}>取消测试</button>}</div>}

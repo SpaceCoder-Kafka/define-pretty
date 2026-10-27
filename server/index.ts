@@ -54,7 +54,7 @@ export async function startServers() {
   try { await featureTests.initialize(); } catch (error) { await dataLock.release(); throw error; }
   const featureCompletions = new FeatureCompletions(featureBoards, store);
   try { await featureCompletions.initialize(); } catch (error) { await dataLock.release(); throw error; }
-  const app = createApp({ featureCompletions, featureTests, featureBoards, store, consolePort, previewOrigin, config, runtime });
+  const app = createApp({ featureCompletions, featureTests, featureBoards, store, consolePort, previewOrigin, ...startup });
   const server = createServer(app);
   const previewServer = createServer(createPreviewApp(consolePort, featureTests));
   let vite: Awaited<ReturnType<typeof import('vite')['createServer']>> | undefined;
