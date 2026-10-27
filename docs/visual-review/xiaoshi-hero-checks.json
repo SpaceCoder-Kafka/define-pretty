@@ -1,0 +1,188 @@
+{
+  "asset": "public/assets/paper/xiaoshi-bear-hero.webp",
+  "generationTool": "image_gen.imagegen",
+  "generatedSource": "/Users/kafka/.codex/generated_images/01a17cd6-218f-7291-8f39-62f90087ceb1/exec-bd909fac-938a-4801-bea4-4291c25860d3.png",
+  "size": [
+    1853,
+    849
+  ],
+  "bytes": 640552,
+  "sha256": "b49bb5fac7baf0d32e4b4851ee779fdb39e0994c583e25995786f0a073da208b",
+  "dimensions": [
+    {
+      "viewport": 1440,
+      "document": 1440,
+      "hero": {
+        "x": 48,
+        "width": 1344,
+        "height": 520
+      },
+      "workbench": {
+        "x": 48,
+        "width": 1344
+      },
+      "copy": {
+        "x": 76,
+        "y": 297.375,
+        "width": 460,
+        "height": 312.625
+      },
+      "upload": {
+        "x": 104,
+        "y": 541,
+        "right": 508,
+        "bottom": 586
+      },
+      "heroBottom": 638
+    },
+    {
+      "viewport": 1024,
+      "document": 1024,
+      "hero": {
+        "x": 24,
+        "width": 976,
+        "height": 500
+      },
+      "workbench": {
+        "x": 24,
+        "width": 976
+      },
+      "copy": {
+        "x": 48,
+        "y": 289.8125,
+        "width": 429.4375,
+        "height": 294.1875
+      },
+      "upload": {
+        "x": 72,
+        "y": 517,
+        "right": 453.4375,
+        "bottom": 562
+      },
+      "heroBottom": 612
+    },
+    {
+      "viewport": 768,
+      "document": 768,
+      "hero": {
+        "x": 24,
+        "width": 720,
+        "height": 540
+      },
+      "workbench": {
+        "x": 24,
+        "width": 720
+      },
+      "copy": {
+        "x": 48,
+        "y": 304.65625,
+        "width": 352.796875,
+        "height": 277.34375
+      },
+      "upload": {
+        "x": 72,
+        "y": 515,
+        "right": 376.796875,
+        "bottom": 560
+      },
+      "heroBottom": 652
+    },
+    {
+      "viewport": 390,
+      "document": 390,
+      "hero": {
+        "x": 14,
+        "width": 362,
+        "height": 570
+      },
+      "workbench": {
+        "x": 14,
+        "width": 362
+      },
+      "copy": {
+        "x": 30,
+        "y": 320.75,
+        "width": 330,
+        "height": 279.25
+      },
+      "upload": {
+        "x": 53,
+        "y": 533,
+        "right": 337,
+        "bottom": 578
+      },
+      "heroBottom": 666
+    },
+    {
+      "viewport": 360,
+      "document": 360,
+      "hero": {
+        "x": 14,
+        "width": 332,
+        "height": 570
+      },
+      "workbench": {
+        "x": 14,
+        "width": 332
+      },
+      "copy": {
+        "x": 30,
+        "y": 320.75,
+        "width": 300,
+        "height": 279.25
+      },
+      "upload": {
+        "x": 53,
+        "y": 533,
+        "right": 307,
+        "bottom": 578
+      },
+      "heroBottom": 666
+    }
+  ],
+  "uploadChooser": "passed; no upload submitted",
+  "settings": "opens and closes with Escape",
+  "errors": [],
+  "tornEdges": {
+    "implementation": "original SVG alpha masks; four uneven edges and small fiber wisps",
+    "sizes": [
+      {
+        "viewport": 1440,
+        "scrollWidth": 1440,
+        "heroWidth": 1344,
+        "workbenchWidth": 1344,
+        "heroX": 48,
+        "workbenchX": 48,
+        "mask": "url(\"http://127.0.0.1:4193/assets/paper/hero-torn-wide.svg\")"
+      },
+      {
+        "viewport": 768,
+        "scrollWidth": 768,
+        "heroWidth": 720,
+        "workbenchWidth": 720,
+        "heroX": 24,
+        "workbenchX": 24,
+        "mask": "url(\"http://127.0.0.1:4193/assets/paper/hero-torn-wide.svg\")"
+      },
+      {
+        "viewport": 390,
+        "scrollWidth": 390,
+        "heroWidth": 362,
+        "workbenchWidth": 362,
+        "heroX": 14,
+        "workbenchX": 14,
+        "mask": "url(\"http://127.0.0.1:4193/assets/paper/hero-torn-narrow.svg\")"
+      },
+      {
+        "viewport": 360,
+        "scrollWidth": 360,
+        "heroWidth": 332,
+        "workbenchWidth": 332,
+        "heroX": 14,
+        "workbenchX": 14,
+        "mask": "url(\"http://127.0.0.1:4193/assets/paper/hero-torn-narrow.svg\")"
+      }
+    ],
+    "errors": []
+  }
+}

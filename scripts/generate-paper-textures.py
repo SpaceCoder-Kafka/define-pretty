@@ -35,3 +35,40 @@ def texture(name, seed, strength):
 texture('light', 31, .065)
 texture('blue', 57, .32)
 texture('tape', 83, .22)
+
+
+def torn_mask(name, width, height, seed):
+    """Nonperiodic torn contour and short wisps, sized for its actual viewport."""
+    rng = random.Random(seed)
+    points, fibers = [], []
+
+    def edge(length, transform):
+        position = 5.0
+        current = rng.uniform(3, 7)
+        next_anchor = 0
+        while position < length - 5:
+            if position >= next_anchor:
+                target = rng.uniform(2.5, 8)
+                next_anchor = position + rng.uniform(18, 47)
+            current += (target - current) * .22
+            depth = max(1.5, current + rng.uniform(-1.1, 1.1))
+            if rng.random() < .09:
+                depth += rng.uniform(1, 2.5)
+            x, y = transform(position, depth)
+            points.append((x, y))
+            if rng.random() < .3:
+                tip_x, tip_y = transform(position + rng.uniform(-1.7, 1.7), max(.4, depth - rng.uniform(.8, 2.7)))
+                fibers.append(f'<path d="M{x:.2f} {y:.2f}L{tip_x:.2f} {tip_y:.2f}" stroke="white" stroke-width="{rng.uniform(.35, .8):.2f}" opacity="{rng.uniform(.3, .8):.2f}"/>')
+            position += rng.uniform(1.4, 4.3)
+
+    edge(width, lambda along, depth: (along, depth))
+    edge(height, lambda along, depth: (width - depth, along))
+    edge(width, lambda along, depth: (width - along, height - depth))
+    edge(height, lambda along, depth: (depth, height - along))
+    contour = ' '.join(f'{x:.2f},{y:.2f}' for x, y in points)
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" preserveAspectRatio="none"><polygon points="{contour}" fill="white"/>{"".join(fibers)}</svg>\n'
+    (DESTINATION / f'hero-torn-{name}.svg').write_text(svg)
+
+
+torn_mask('wide', 1344, 520, 149)
+torn_mask('narrow', 362, 570, 211)
