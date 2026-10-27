@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">从一个 CSS 按钮开始</title>
+  <desc id="desc">正面蓝色纸浏览器小窗内，一枚芥黄按钮与手剪鼠标箭头。</desc>
+  <defs>
+    <filter id="paper" x="-15%" y="-15%" width="135%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".69 .21" numOctaves="3" seed="23"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in="SourceGraphic" mode="multiply"/>
+      <feDropShadow dx=".8" dy="1.6" stdDeviation="1.2" flood-color="#292B2F" flood-opacity=".13"/>
+    </filter>
+  </defs>
+  <path d="m34 54 69-2 79 3 4 47-3 66-77 2-69-4-4-58Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <path d="m46 78 127 2-1 73-62 2-63-3 1-36Z" fill="#F6F3EC" filter="url(#paper)"/>
+  <g fill="#F6F3EC" opacity=".85">
+    <path d="m47 63 4-1 2 4-2 3-4-1Z"/>
+    <path d="m60 63 4 1 1 4-4 2-2-3Z"/>
+    <path d="m74 64 4-1 1 5-4 2-2-3Z"/>
+  </g>
+  <path d="m75 106 63-1 5 3-1 25-35 2-33-2-2-19Z" fill="#D9A947" filter="url(#paper)"/>
+  <path d="m93 119 27-.5" stroke="#292B2F" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="m143 132 1 28 8-7 8 12 7-5-9-12 11-3Z" fill="#292B2F" filter="url(#paper)"/>
+  <path d="m156 100 8-5m-16-3 2-9m17 27 9 1" stroke="#292B2F" stroke-width="2.7" stroke-linecap="round"/>
+</svg>

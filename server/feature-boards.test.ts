@@ -75,7 +75,7 @@ test('real generation contract snapshots input and keeps old cards when starting
   try {
     await f.boards.generate(f.board.id);
     await waitFor(async () => (await f.boards.get(f.board.id)).status === 'completed');
-    const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 4); assert.equal(board.cards[0].selected, false); assert.equal(observedPrompt, FEATURE_PROMPT);
+    const board = await f.boards.get(f.board.id); assert.equal(board.cards.length, 4); assert(board.cards.every(card => card.selected)); assert.equal(observedPrompt, FEATURE_PROMPT);
     const input = JSON.parse(await readFile(path.join(f.boards.directory(board.id), 'input.json'), 'utf8')); assert.equal(input.reference.sha256, board.reference.sha256); assert.equal(input.prompt, FEATURE_PROMPT);
     assert.equal(input.cardFormat, 8); assert.equal(input.guidanceVersion, 14);
     assert(observedPrompt.includes(STYLE_TRANSFER_GUIDANCE));
@@ -358,7 +358,7 @@ test('core generation requires all four foundations and never accepts tier-three
     assert.deepEqual(done.cards[1].spec, typography);
     assert.deepEqual(done.cards[2].spec, spacing);
     assert.deepEqual(done.cards[3].spec, palette);
-    assert.equal(done.cards.some(card => card.selected), false);
+    assert(done.cards.every(card => card.selected));
   } finally { await f.cleanup(); }
 });
 

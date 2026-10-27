@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">一套小而够用的设计系统</title>
+  <desc id="desc">暖白底纸上的蓝黄绿组件色块，包含标题条、按钮与可复用的小卡片。</desc>
+  <defs>
+    <filter id="paper" x="-15%" y="-15%" width="135%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".63 .22" numOctaves="3" seed="53"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in="SourceGraphic" mode="multiply"/>
+      <feDropShadow dx=".8" dy="1.6" stdDeviation="1.2" flood-color="#292B2F" flood-opacity=".13"/>
+    </filter>
+  </defs>
+  <path d="m42 43 80-2 53 4 3 73-3 60-68 1-67-4 2-63Z" fill="#F6F3EC" filter="url(#paper)"/>
+  <path d="m56 58 105 1-1 21-57 1-48-2Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <path d="m56 94 28-1 2 27-30 1Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <path d="m95 94 28 1-1 26-28-1Z" fill="#D9A947" filter="url(#paper)"/>
+  <path d="m134 94 27-1 1 28-28-1Z" fill="#82917F" filter="url(#paper)"/>
+  <path d="m56 136 46-1 1 26-48 1Z" fill="#82917F" filter="url(#paper)"/>
+  <path d="m116 139 44-1 3 3-1 17-3 3-43-1-2-4 1-14Z" fill="#D9A947" filter="url(#paper)"/>
+  <path d="m66 69 35 1m26 80 21-.5m-111-40-9-2m10-10-6-7" stroke="#292B2F" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

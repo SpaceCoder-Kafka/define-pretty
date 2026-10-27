@@ -52,6 +52,7 @@ export class FeatureCompletions {
   private stopped=false;
   private preparing?: Promise<void>;
   private active?: { id:string; controller:AbortController; promise:Promise<void>; reason?:'cancelled'|'interrupted'|'timeout' };
+  get busy() { return this.starting || !!this.active || !!this.preparing; }
   constructor(private boards:FeatureBoards, private store:FileStore, private executor:Executor=executeCodex, private cropper:Cropper=cropFeatureReference, private timeoutMs=1_800_000) { this.root=path.join(store.root,'feature-completions'); }
   directory(id:string) { return path.join(this.root,requireSafeId(id)); }
   async get(id:string):Promise<FeatureCompletion> {

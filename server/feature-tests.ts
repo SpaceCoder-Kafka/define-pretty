@@ -87,6 +87,7 @@ export class FeatureTests {
   private sourcePromise?: Promise<FeatureTestSource>;
   private builtinsPromise?: Promise<FeatureTestSource[]>;
   private active?: { id: string; controller: AbortController; promise: Promise<void>; reason?: 'cancelled' | 'interrupted' | 'timeout' };
+  get busy() { return !!this.active || !!this.preparing; }
   private preparing?: Promise<void>;
   private stopped = false;
   constructor(private boards: FeatureBoards, private mainRoot: string, private previewOrigin: string, private executor: Executor = executeCodex, private checker: TestChecker = checkFeatureTest, private timeoutMs = 1_800_000, private builtinRoot = builtinWebsiteRoot) {

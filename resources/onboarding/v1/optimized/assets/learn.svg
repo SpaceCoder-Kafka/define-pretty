@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">边做小项目，边慢慢生长</title>
+  <desc id="desc">一本平贴展开的暖白纸书，蓝色封面托底，书页间长出一株绿色种子芽。</desc>
+  <defs>
+    <filter id="paper" x="-15%" y="-15%" width="135%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".65 .2" numOctaves="3" seed="67"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in="SourceGraphic" mode="multiply"/>
+      <feDropShadow dx=".8" dy="1.6" stdDeviation="1.2" flood-color="#292B2F" flood-opacity=".13"/>
+    </filter>
+  </defs>
+  <path d="m34 101 42-2 34 9 34-9 42 2 1 73-43-1-34 8-35-9-41 1-2-39Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <path d="m42 93 30 1 18 5 19 11-1 61-22-10-20-3-25 2 2-33Z" fill="#F6F3EC" filter="url(#paper)"/>
+  <path d="m111 110 22-11 20-5 25-1 1 67-26-2-20 4-22 9 1-31Z" fill="#F6F3EC" filter="url(#paper)"/>
+  <path d="m55 115 19 1 17 7m-36 4 20 1 15 6m-35 4 17 1 12 5m45-18 14-5 20-2m-34 18 17-5 16-1" stroke="#292B2F" stroke-opacity=".35" stroke-width="2" stroke-linecap="round"/>
+  <path d="m146 148 14-1-1 28-6-4-6 4Z" fill="#D9A947" filter="url(#paper)"/>
+  <path d="M108 110c-2-16-1-29 2-43" stroke="#82917F" stroke-width="4" stroke-linecap="round"/>
+  <path d="m109 84-15-1-13-9-5-17 16 2 13 9Zm1-13 1-16 10-12 18-3-4 17-12 11Z" fill="#82917F" filter="url(#paper)"/>
+  <path d="m102 103 7-4 7 5 1 8-8 4-8-5Z" fill="#D9A947" filter="url(#paper)"/>
+  <path d="m88 46-5-7m62 31 9-3m-3-10 5-6" stroke="#292B2F" stroke-width="2.7" stroke-linecap="round"/>
+</svg>

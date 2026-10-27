@@ -17,6 +17,7 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
   const [runs,setRuns]=useState<FeatureTest[]>([]);
   const [selectedId,setSelectedId]=useState(''), [config,setConfig]=useState<ModelConfig>();
   const [busy,setBusy]=useState(false), [error,setError]=useState('');
+  const [loaded,setLoaded]=useState(false), [anyTestRunning,setAnyTestRunning]=useState(false);
   const [sources,setSources]=useState<FeatureTestSource[]>([]), [sourceRuns,setSourceRuns]=useState<FeatureSourceRun[]>([]);
   const [requirements,setRequirements]=useState(()=>localStorage.getItem('pretty-source-requirements') || '');
   const [sourceId,setSourceId]=useState(()=>localStorage.getItem('pretty-source-id') || '');
@@ -34,9 +35,9 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
   useEffect(()=>{ if(!bootstrap)return; let live=true;
     setConfig(resolveModelConfig({ ...bootstrap.defaults.config, reasoningEffort: 'medium' }, bootstrap.models || []));
     const refresh=async()=>{
-      const [available,jobs]=await Promise.all([api<FeatureTestSource[]>('/feature-tests/sources'),api<FeatureSourceRun[]>('/feature-source-runs')]);
+      const [available,jobs,activity]=await Promise.all([api<FeatureTestSource[]>('/feature-tests/sources'),api<FeatureSourceRun[]>('/feature-source-runs'),api<{busy:boolean}>('/onboarding-availability')]);
       if(!live)return;
-      setSources(available);setSourceRuns(jobs);
+      setSources(available);setSourceRuns(jobs);setAnyTestRunning(activity.busy);setLoaded(true);
       setSourceId(id=>available.some(s=>s.runId===id)?id:available.find(s=>s.builtin?.slug===localStorage.getItem('pretty-source-builtin'))?.runId || available[0]?.runId || '');
       const pending=jobs.find(j=>j.id===pendingSource.current);
       if(pending && !isActive(pending)) {
@@ -91,7 +92,7 @@ export function useFeatureTests(board: FeatureBoard | undefined, bootstrap: Boot
   function chooseSource(id:string) {previewChosen.current=true;setSourceId(id);setSelectedId('');}
   function chooseHistory(id:string) {previewChosen.current=true;setSelectedId(id);}
   const refinementUsesSavedInput=!!current&&((board?.id!==current.boardId || board?.revision!==current.boardRevision)||(!!source&&source.runId!==current.source.runId));
-  return {models:bootstrap?.models || [],localModel:bootstrap?.defaults.config.model,modelCatalogError:bootstrap?.modelCatalogError,sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,refine,refinementUsesSavedInput,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
+  return {loaded,anyTestRunning,models:bootstrap?.models || [],localModel:bootstrap?.defaults.config.model,modelCatalogError:bootstrap?.modelCatalogError,sources,sourceRuns,sourceId,chooseSource,requirements,setRequirements,generateSource,cancelSource,sourceRunning,authenticated:!!bootstrap?.runtime.authenticated,source,runs,current,selectedId,setSelectedId:chooseHistory,config,setConfig,busy,error,running,start,refine,refinementUsesSavedInput,cancel,section,origin:bootstrap?.previewOrigin || '',ready:!!source&&!!config&&!!bootstrap?.runtime.authenticated};
 }
 type State=ReturnType<typeof useFeatureTests>;
 type ProgressRun = { id:string; status:string; createdAt:string; finishedAt?:string; elapsedMs?:number; progress?:ExecutionProgress; draftPreview?:DraftPreview };
@@ -122,10 +123,19 @@ function RunProgress({run}: {run:ProgressRun}) {
     {!!progress?.agents.length&&<div className="feature-run-agents" aria-label="子代理任务">{progress.agents.map(agent=><span key={agent.id} className={`feature-run-agent is-${agent.status}`}><i aria-hidden="true"/>{agent.label} · {agentLabels[agent.status]}</span>)}</div>}
   </div>;
 }
-function Website({name,url,empty,actions,note}: {name:string;url?:string;empty:string;actions?:ReactNode;note?:string}) {
+export function Website({name,url,empty,actions,note}: {name:string;url?:string;empty:string;actions?:ReactNode;note?:string}) {
   const box=useRef<HTMLDivElement>(null), [scale,setScale]=useState(.4), [fullscreen,setFullscreen]=useState(false);
   useEffect(()=>{if(!box.current)return;const observer=new ResizeObserver(([entry])=>setScale(entry.contentRect.width/1440));observer.observe(box.current);return()=>observer.disconnect();},[]);
   return <article className="feature-test-page"><header><div className="feature-test-page-title"><strong>{name}</strong>{note&&<span>{note}</span>}</div><div className="feature-test-page-actions">{actions}<button className="feature-icon" aria-label={`全屏查看${name}`} disabled={!url} onClick={()=>setFullscreen(true)}><Maximize2 size={16}/></button></div></header><div ref={box} className="feature-test-viewport" style={{height:1000*scale}}>{url?<iframe title={name} src={url} sandbox="allow-scripts" referrerPolicy="no-referrer" style={{transform:`scale(${scale})`}}/>:<p>{empty}</p>}</div>{fullscreen&&url&&<FullscreenPreview name={name} url={url} onClose={()=>setFullscreen(false)}/>}</article>;
+}
+export function DemoValidation({origin,ready}: {origin:string;ready:boolean}) {
+  return <section className="feature-validation" aria-label="示例网页对比">
+    <div className="feature-validation-head"><div><h2><FlaskConical size={20}/>验证所选设计</h2><p>把所选设计应用到自己的网页，直观看到优化前后的变化。</p></div><span>快速体验 · 示例</span></div>
+    <div className="feature-test-pair" data-tour="result">
+      <Website name="原始网页" url={`${origin}/onboarding/v1/original/index.html`} empty="正在读取示例…"/>
+      <Website name="优化后的网页" url={ready?`${origin}/onboarding/v1/optimized/index.html`:undefined} empty="点击“验证所选设计”，查看预先生成的示例效果。" note={ready?'预先生成的示例效果':undefined}/>
+    </div>
+  </section>;
 }
 function GeneratedWebsite({run,name,baseUrl,finalReady,empty}: {run?:ProgressRun;name:string;baseUrl?:string;finalReady:boolean;empty:string}) {
   const [viewedDraft,setViewedDraft]=useState<{id:string;version?:string}>();

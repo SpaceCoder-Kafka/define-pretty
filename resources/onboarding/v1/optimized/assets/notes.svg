@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">给数字生活做减法</title>
+  <desc id="desc">一只蓝色纸文件夹，收好三张简洁整齐的纸条，留下呼吸的空隙。</desc>
+  <defs>
+    <filter id="paper" x="-15%" y="-15%" width="135%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".67 .18" numOctaves="3" seed="41"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in="SourceGraphic" mode="multiply"/>
+      <feDropShadow dx=".8" dy="1.6" stdDeviation="1.2" flood-color="#292B2F" flood-opacity=".13"/>
+    </filter>
+  </defs>
+  <path d="m38 73 44-1 10 13 83-1 4 84-5 5-134-2-4-55Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <g filter="url(#paper)">
+    <path d="m58 57 100 2 1 23-102-2Z" fill="#F6F3EC"/>
+    <path d="m70 68 34 1" stroke="#292B2F" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <g filter="url(#paper)">
+    <path d="m56 87 104-1 1 23-106-1Z" fill="#F6F3EC"/>
+    <path d="m69 98 48-1" stroke="#292B2F" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <path d="m57 114 102 1-1 24-101-1Z" fill="#D9A947" filter="url(#paper)"/>
+  <path d="m35 130 62 2 14-8 72 1-6 48-4 4-132-3-4-21Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <path d="m88 145 41-1 1 15-42 1Z" fill="#F6F3EC" filter="url(#paper)"/>
+  <path d="m99 152 19-.5m60-88 5-8m3 19 10-2" stroke="#292B2F" stroke-width="2.7" stroke-linecap="round"/>
+</svg>

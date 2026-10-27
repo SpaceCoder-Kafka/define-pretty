@@ -142,6 +142,7 @@ export function cardsInput(value: unknown, generated = false): FeatureCard[] {
 export class FeatureBoards {
   private tail: Promise<unknown> = Promise.resolve();
   private active?: { id: string; controller: AbortController; promise: Promise<void>; reason?: string };
+  get busy() { return this.starting || !!this.active || !!this.preparing; }
   private stopped = false;
   private starting = false;
   private preparing?: Promise<void>;
@@ -255,7 +256,7 @@ export class FeatureBoards {
         for (const foundation of Object.keys(FOUNDATION_TITLES) as FoundationKind[]) {
           if (cards.filter(card => card.tier === 'foundation' && card.foundation === foundation).length !== 1) fail(`生成结果缺少唯一的${FOUNDATION_TITLES[foundation]}基础规范，请重新生成。`);
         }
-        await this.update(board.id, { status: 'completed', cards:cards.map(c=>({...c,discovery:'core'})) });
+        await this.update(board.id, { status: 'completed', cards:cards.map(c=>({...c,discovery:'core',selected:featureReady(c)})) });
       }
     } catch (error) {
       await this.update(board.id, { status: this.stopped ? 'interrupted' : active.reason === '已取消生成。' ? 'cancelled' : 'failed', error: active.reason || (error as Error).message });

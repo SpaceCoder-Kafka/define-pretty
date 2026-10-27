@@ -11,6 +11,7 @@
     "start:cards": "npm start",
     "start": "NODE_ENV=production tsx server/index.ts",
     "test": "tsx --test server/*.test.ts",
+    "test:onboarding": "node scripts/onboarding-smoke.mjs",
     "check": "tsc --noEmit"
   },
   "dependencies": {

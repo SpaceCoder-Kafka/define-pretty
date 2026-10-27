@@ -1,0 +1,592 @@
+{
+  "version": 1,
+  "board": {
+    "id": "onboarding-v1",
+    "title": "剪纸风格 · 快速体验",
+    "reference": {
+      "id": "onboarding-v1",
+      "name": "剪纸风格参考.jpg",
+      "mimeType": "image/jpeg",
+      "size": 176596,
+      "sha256": "b0334196d55f3437f072c478098b6630dbd9de47075097f6d31e8edcae3caee5",
+      "url": "/api/onboarding-demo/reference",
+      "createdAt": "2026-10-27T09:45:28.578Z"
+    },
+    "cards": [
+      {
+        "kind": "global",
+        "tier": "foundation",
+        "foundation": "style",
+        "discovery": "core",
+        "id": "demo-card-1",
+        "title": "整体视觉风格",
+        "description": "米白纸面承托大幅蓝色剪纸主体，深色粗体文案落在浅色纸片上；下方以四张低饱和纸卡重复节奏。撕边、纤维和少量手绘线条让平面画面呈现手工拼贴感。",
+        "instruction": "让一个大面积剪纸形体成为视觉重心，以浅纸色承载文字和真实功能，再用尺度接近的重复内容形成稳定节奏。协调形体、文字块和留白，保持正面平视、浅层叠放与可见纸质细节；素材题材按目标业务重新创作。",
+        "effect": "大色面先吸引视线，浅色文字区保证阅读，下方重复单元让内容容易逐项浏览；手工边缘使画面保持辨识度。",
+        "adaptation": "",
+        "applicability": "适合需要亲和感的介绍页、功能概览或活动页面。用于高密度数据页面时保留真实信息与操作，并让纸艺主要服务于重点区域。",
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "local",
+        "tier": "foundation",
+        "foundation": "typography",
+        "spec": {
+          "kind": "typography",
+          "basis": "依据 736 px 宽截图中主标题、卡片标题、正文和导航文字的可见大小关系，折算为参考内容区宽 1280 px 的桌面迁移起点；截图不能确证字体名称，候选字体均为建议，字号仍需按实际渲染校准。",
+          "referenceWidth": 1280,
+          "rows": [
+            {
+              "role": "page-title",
+              "label": "主标题，紧凑两行",
+              "fontFamily": "Nunito Sans, Arial, sans-serif",
+              "fontEvidence": "suggested",
+              "sizePx": 72,
+              "weight": 700,
+              "lineHeightPx": 70,
+              "letterSpacingEm": -0.035,
+              "evidence": "estimated"
+            },
+            {
+              "role": "section-title",
+              "label": "重复内容标题",
+              "fontFamily": "Nunito Sans, Arial, sans-serif",
+              "fontEvidence": "suggested",
+              "sizePx": 27,
+              "weight": 700,
+              "lineHeightPx": 31,
+              "letterSpacingEm": -0.02,
+              "evidence": "estimated"
+            },
+            {
+              "role": "body",
+              "label": "正文比例基准",
+              "fontFamily": "Nunito Sans, Arial, sans-serif",
+              "fontEvidence": "suggested",
+              "sizePx": 18,
+              "weight": 400,
+              "lineHeightPx": 25,
+              "letterSpacingEm": 0,
+              "evidence": "estimated"
+            },
+            {
+              "role": "label",
+              "label": "导航与辅助标签",
+              "fontFamily": "Arial, sans-serif",
+              "fontEvidence": "suggested",
+              "sizePx": 12,
+              "weight": 600,
+              "lineHeightPx": 16,
+              "letterSpacingEm": 0.02,
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-2",
+        "title": "字体与文字层级",
+        "description": "主标题在浅纸片中分成两行，字形厚实且行距紧；卡片标题明显小一档，正文为较细的短行文字，顶部导航最小。",
+        "instruction": "以正文为比例基准，主标题约为其四倍、卡片标题约为一点五倍；让主标题占据明显的文字块面积并保留紧凑换行。字体名称仅作相近气质的候选，按目标文字长度调整断行和容器宽度。",
+        "effect": "标题先被读到，正文仍有舒适行距；重复单元的标题和说明形成稳定层级。",
+        "adaptation": "",
+        "applicability": "适合有简短主张和多项简述的页面。目标内容较长时可增加文字区高度，避免为了复刻换行而删减真实文字。",
+        "region": {
+          "x": 0.045,
+          "y": 0.275,
+          "width": 0.88,
+          "height": 0.55
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "layout",
+        "tier": "foundation",
+        "foundation": "layout",
+        "layout": {
+          "aspectRatio": 0.667,
+          "blocks": [
+            {
+              "label": "顶部导航",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 0.045,
+              "role": "navigation"
+            },
+            {
+              "label": "主视觉区",
+              "x": 0,
+              "y": 0.045,
+              "width": 1,
+              "height": 0.445,
+              "role": "main"
+            },
+            {
+              "label": "重复内容区",
+              "x": 0,
+              "y": 0.49,
+              "width": 1,
+              "height": 0.4,
+              "role": "main"
+            },
+            {
+              "label": "左列双单元",
+              "x": 0.08,
+              "y": 0.534,
+              "width": 0.4053,
+              "height": 0.31200000000000006,
+              "role": "support"
+            },
+            {
+              "label": "右列双单元",
+              "x": 0.5146999999999999,
+              "y": 0.534,
+              "width": 0.4053,
+              "height": 0.31200000000000006,
+              "role": "support"
+            },
+            {
+              "label": "收尾导航",
+              "x": 0,
+              "y": 0.89,
+              "width": 1,
+              "height": 0.10999999999999999,
+              "role": "navigation"
+            },
+            {
+              "label": "主文案与入口",
+              "x": 0.05,
+              "y": 0.27284,
+              "width": 0.445,
+              "height": 0.19980499999999998,
+              "role": "highlight"
+            }
+          ],
+          "proportions": [
+            {
+              "type": "split",
+              "label": "整页纵向区域",
+              "axis": "vertical",
+              "reference": null,
+              "region": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "gap": 0,
+              "members": [
+                {
+                  "block": 0,
+                  "share": 4.5
+                },
+                {
+                  "block": 1,
+                  "share": 44.5
+                },
+                {
+                  "block": 2,
+                  "share": 40
+                },
+                {
+                  "block": 5,
+                  "share": 11
+                }
+              ]
+            },
+            {
+              "type": "split",
+              "label": "重复内容区两列",
+              "axis": "horizontal",
+              "reference": 2,
+              "region": {
+                "x": 0.08,
+                "y": 0.11,
+                "width": 0.84,
+                "height": 0.78
+              },
+              "gap": 0.035,
+              "members": [
+                {
+                  "block": 3,
+                  "share": 50
+                },
+                {
+                  "block": 4,
+                  "share": 50
+                }
+              ]
+            },
+            {
+              "type": "relative",
+              "block": 6,
+              "reference": 1,
+              "widthPercent": 44.5,
+              "heightPercent": 44.9,
+              "offsetXPercent": 5,
+              "offsetYPercent": 51.2
+            }
+          ]
+        },
+        "spec": {
+          "kind": "spacing",
+          "basis": "按 736 px 宽整页截图观察导航、主视觉、两列重复内容和页尾的边界，再以 1280/736 线性折算横向与局部间距；数值均为估计，纵向结构以 layout 比例为准。",
+          "referenceWidth": 1280,
+          "rows": [
+            {
+              "label": "重复内容区左右内边距",
+              "value": 100,
+              "unit": "px",
+              "reference": "参考内容区宽 1280 px；对应内容区约 8% 的左右留白",
+              "usage": "使两列内容不贴画布边缘",
+              "evidence": "estimated"
+            },
+            {
+              "label": "同列上下单元间距",
+              "value": 52,
+              "unit": "px",
+              "reference": "参考内容区宽 1280 px，由截图约 30 px 的可见行距折算",
+              "usage": "分开同列的两个重复内容单元",
+              "evidence": "estimated"
+            },
+            {
+              "label": "内容单元内部留白",
+              "value": 42,
+              "unit": "px",
+              "reference": "参考内容区宽 1280 px，按截图卡片内文字与纸边距离估计",
+              "usage": "给图形、标题和说明留出呼吸空间",
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-3",
+        "title": "布局与空间关系",
+        "description": "截图依次为窄导航、大幅主视觉、两列各两张的重复内容及浅棕页尾；主文案纸片压在主视觉左下区域。示意比例按整页可见边界估计。",
+        "instruction": "勾选后按这一关系重新组织指定页面：把核心表达放入高占比主视觉，把主要文案与入口放在其左下前层，重复信息分成两列、每列上下两项，末尾放收尾内容。保留真实内容和功能；窄屏可建议改为单列，主文案转入主视觉下方，并按内容长度调整高度。",
+        "effect": "阅读路径由顶部进入主视觉，再落到文案入口，随后逐项扫描重复内容，最后抵达页尾。",
+        "adaptation": "",
+        "applicability": "适合有一个核心主张和数个并列要点的页面；若目标页有复杂表格或连续操作流程，只在用户指定的区域应用这套重组关系。",
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "local",
+        "tier": "foundation",
+        "foundation": "palette",
+        "spec": {
+          "kind": "palette",
+          "basis": "依据整张截图的可见色面关系目测估计 HEX 和面积；纸纹、阴影与拍摄色偏会改变局部像素，以下不是原设计标注或精确取样。面积为整页近似占比，边框面积难以可靠判断。",
+          "colors": [
+            {
+              "role": "page-background",
+              "label": "暖米白纸底",
+              "hex": "#F2EEE6",
+              "usage": "页面空白、导航及内容区的连续底色",
+              "areaPercent": 24,
+              "evidence": "estimated"
+            },
+            {
+              "role": "surface",
+              "label": "浅纸片表面",
+              "hex": "#F6F3EC",
+              "usage": "主文案承载面及浅色内容表面",
+              "areaPercent": 16,
+              "evidence": "estimated"
+            },
+            {
+              "role": "text-primary",
+              "label": "炭黑正文",
+              "hex": "#292B2F",
+              "usage": "主标题、卡片标题及关键文字",
+              "areaPercent": 2,
+              "evidence": "estimated"
+            },
+            {
+              "role": "text-secondary",
+              "label": "灰褐说明文字",
+              "hex": "#66645F",
+              "usage": "说明段落与次级信息",
+              "areaPercent": 1,
+              "evidence": "estimated"
+            },
+            {
+              "role": "accent",
+              "label": "主视觉纸蓝",
+              "hex": "#5C8AAC",
+              "usage": "主视觉的大面积聚焦色面",
+              "areaPercent": 28,
+              "evidence": "estimated"
+            },
+            {
+              "role": "accent",
+              "label": "芥黄纸色",
+              "hex": "#D9A947",
+              "usage": "顶部和局部图形的暖色呼应",
+              "areaPercent": 8,
+              "evidence": "estimated"
+            },
+            {
+              "role": "other",
+              "label": "灰绿纸色",
+              "hex": "#82917F",
+              "usage": "侧缘、卡片及小幅图形的冷暖过渡",
+              "areaPercent": 7,
+              "evidence": "estimated"
+            },
+            {
+              "role": "other",
+              "label": "牛皮纸棕",
+              "hex": "#BB9674",
+              "usage": "页尾低明度收束色",
+              "areaPercent": 11,
+              "evidence": "estimated"
+            },
+            {
+              "role": "border",
+              "label": "浅灰褐细边",
+              "hex": "#C7C1B7",
+              "usage": "输入入口等少量轮廓",
+              "areaPercent": null,
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-4",
+        "title": "配色与明暗分配",
+        "description": "暖米白占据页面空白，纸蓝集中于主视觉；黄、灰绿分布在边缘和小图形，浅纸片托住深色文字，牛皮纸棕只在页尾形成收束。",
+        "instruction": "保持浅底和深字的阅读对比，让最醒目的颜色集中在核心素材而非平均铺满组件；暖黄、灰绿作为较小的辅助色面，棕色用于收尾或次要区带。HEX 与面积均是可校准的观察估计。",
+        "effect": "视线先落在蓝色主体与深色主标题，其他色面提供层次而不抢夺文字。",
+        "adaptation": "",
+        "applicability": "适合有明确视觉焦点的介绍或内容概览；业务状态色、数据编码色和已有品牌色需要按真实语义保留并协调。",
+        "region": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "local",
+        "tier": "signature",
+        "spec": {
+          "kind": "attributes",
+          "basis": "主视觉中可见一块占幅很大的蓝色不规则剪纸形体；原图以白纸眼和炭黑面部形状组成角色，这些具体五官仅是观察样本。",
+          "rows": [
+            {
+              "property": "主体占幅",
+              "value": "剪纸主形体约占主视觉宽度的 65%–85%，边缘局部超出可见区",
+              "scope": "需要核心插画的主视觉区域",
+              "evidence": "estimated"
+            },
+            {
+              "property": "轮廓与比例",
+              "value": "近圆但不规则的宽大轮廓，局部突起和凹口明显；用少量大形状组织识别点",
+              "scope": "新创作的核心主体",
+              "evidence": "estimated"
+            },
+            {
+              "property": "构图与透视",
+              "value": "正面平视、弱透视，主体与背景纸层重叠而非置于深场景",
+              "scope": "主视觉素材",
+              "evidence": "estimated"
+            },
+            {
+              "property": "细节密度",
+              "value": "主体内部以少量高对比剪纸部件传意，细碎纹理留给纸材",
+              "scope": "主视觉素材",
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-5",
+        "title": "超大不规则剪纸主体",
+        "description": "蓝色大形体从画面两侧延伸，轮廓起伏且像手撕纸；白纸眼与黑色口部集中在上半部，形成少部件、高辨识的正面形象。",
+        "instruction": "按目标网站的内容选择新的主体、动作与所需场景，以宽大的不规则剪纸轮廓占据主视觉，用少量大块形状表达其关键特征，并保留平视、叠纸和疏密对比。只有业务确需角色时才使用面部语言。",
+        "effect": "大形体在远看时即可被识别，局部简化使文字入口仍保持存在感。",
+        "adaptation": "",
+        "applicability": "适合需要原创主视觉的品牌说明、产品概念或专题页；信息准确性依赖实物照片、图表或精确示意时，应让剪纸主体表达概念而非代替事实内容。",
+        "region": {
+          "x": 0.055,
+          "y": 0.039,
+          "width": 0.945,
+          "height": 0.451
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "local",
+        "tier": "signature",
+        "spec": {
+          "kind": "attributes",
+          "basis": "主视觉、文案纸片、内容卡和页尾均能看见毛糙撕边、纸纤维与轻微叠压；截图未提供材质或阴影的精确参数。",
+          "rows": [
+            {
+              "property": "撕边",
+              "value": "边缘呈不均匀的短起伏，少量纤维突出；避免统一波浪线或规则圆角",
+              "scope": "需要纸片感的容器及插画色面",
+              "evidence": "estimated"
+            },
+            {
+              "property": "纸面",
+              "value": "低对比细颗粒与纤维斑驳，纹理可见但不压过文字",
+              "scope": "纸片表面和大面积色纸",
+              "evidence": "estimated"
+            },
+            {
+              "property": "叠层光影",
+              "value": "边缘下方窄而柔和的接触阴影，层数浅，保持正面平贴的观感",
+              "scope": "相互覆盖的纸片",
+              "evidence": "estimated"
+            },
+            {
+              "property": "边界节奏",
+              "value": "宽幅纸层交错覆盖，撕边方向和起伏尺度略有变化",
+              "scope": "区带交界及重点纸片",
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-6",
+        "title": "纤维撕边与浅层叠纸",
+        "description": "顶部黄纸、蓝色主体外沿、白色文案纸片和下方卡片都保留毛糙纸边；接触处有轻微阴影，纸面可见细密颗粒。",
+        "instruction": "在目标内容需要纸艺表达的区域使用不规则撕边、克制的纤维纹理和浅接触阴影；让纸层覆盖关系清楚，纹理密度随文字可读性降低。素材可按业务重新绘制或生成。",
+        "effect": "色块获得可触摸的纸张厚度，多个区域因此像同一套手工拼贴作品。",
+        "adaptation": "",
+        "applicability": "适合插画背景、重点容器与分区边缘；密集表格、细小控件和长段文字区域应减少纹理干扰。",
+        "region": {
+          "x": 0,
+          "y": 0.038,
+          "width": 1,
+          "height": 0.852
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "local",
+        "tier": "signature",
+        "spec": {
+          "kind": "attributes",
+          "basis": "四张内容卡均为淡色纸片，上沿附近有一小段半透明棕色纸胶带；每张卡的图形在左、文字在右，图形由少数剪纸块组成。",
+          "rows": [
+            {
+              "property": "卡片表面",
+              "value": "低饱和浅色纸面，边缘略不规则，卡与底纸有轻微层次",
+              "scope": "重复内容单元",
+              "evidence": "estimated"
+            },
+            {
+              "property": "固定细节",
+              "value": "卡片上沿偏中位置的小块窄纸胶带，颜色比纸面略深且略透底纹",
+              "scope": "需要拼贴叙事的内容单元",
+              "evidence": "estimated"
+            },
+            {
+              "property": "图文占位",
+              "value": "图形约占单元内部宽度的三分之一，标题和简述合占其余区域",
+              "scope": "图文内容单元",
+              "evidence": "estimated"
+            },
+            {
+              "property": "图形完成度",
+              "value": "平面剪纸、少量粗线和简化形体组成可辨语义图形，不采用精细透视或照片细节",
+              "scope": "为目标业务新创作的单元图形",
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-7",
+        "title": "胶带纸卡与小幅剪纸图形",
+        "description": "下方四张卡片以不同浅色纸面承载内容，顶部各有短胶带；左侧纸艺小图形与右侧标题、短说明保持相近的排列。",
+        "instruction": "把目标业务的并列信息做成可独立阅读的纸卡：左侧创作对应语义的简化剪纸图形，右侧保留真实标题与说明；用浅色纸面和少量胶带细节建立同族感。卡片数量与最终分组由目标内容决定。",
+        "effect": "重复单元既整齐又有手作变化，图形帮助快速识别各项内容。",
+        "adaptation": "",
+        "applicability": "适合功能、步骤、主题或服务要点；不适合必须逐格精确比较的大型数据表。",
+        "region": {
+          "x": 0.075,
+          "y": 0.517,
+          "width": 0.85,
+          "height": 0.347
+        },
+        "selected": true,
+        "application": ""
+      },
+      {
+        "kind": "local",
+        "tier": "signature",
+        "spec": {
+          "kind": "attributes",
+          "basis": "主视觉右上有三组粗短黑色放射笔触，卡片图形旁也重复出现短促的手绘线；这些是可见的静态装饰。",
+          "rows": [
+            {
+              "property": "线条造型",
+              "value": "炭黑、略粗、端部不齐的短笔触，长度有变化",
+              "scope": "强调主体或小图形的局部",
+              "evidence": "estimated"
+            },
+            {
+              "property": "节奏",
+              "value": "每组约 2–4 笔，以放射或斜向间隔排列，保留明显空隙",
+              "scope": "局部强调记号",
+              "evidence": "estimated"
+            },
+            {
+              "property": "密度",
+              "value": "只在少数焦点旁出现，不铺成连续花纹",
+              "scope": "插画与内容单元",
+              "evidence": "estimated"
+            }
+          ]
+        },
+        "discovery": "core",
+        "id": "demo-card-8",
+        "title": "炭黑短笔触作局部强调",
+        "description": "右上主视觉旁有三道放射状粗线，部分卡片小图形旁也有较短的斜线；笔触边缘不完全平直。",
+        "instruction": "在目标内容确有视觉焦点的位置加入少量方向明确的手绘短笔触，让其指向主体或表达动作感；保持笔画疏朗、粗细略变，不将原图笔触位置当成固定模板。",
+        "effect": "静态剪纸画面多出轻微动势，视线被引向重点图形。",
+        "adaptation": "",
+        "applicability": "适合插画主体和简化图形的局部强调；密集文字与数据区不宜增加这类记号。",
+        "region": {
+          "x": 0.764,
+          "y": 0.068,
+          "width": 0.174,
+          "height": 0.137
+        },
+        "selected": true,
+        "application": ""
+      }
+    ],
+    "config": {
+      "model": "demo",
+      "reasoningEffort": "none",
+      "cliVersion": "bundled"
+    },
+    "status": "completed",
+    "generationMode": "core",
+    "revision": 1,
+    "createdAt": "2026-10-27T15:25:27.878Z",
+    "updatedAt": "2026-10-27T15:37:24.299Z"
+  }
+}

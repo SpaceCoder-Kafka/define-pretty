@@ -7,7 +7,9 @@ import { overviewPlacement, type OverviewCell } from '../shared/feature-overview
 import { api, errorMessage, setApiToken } from './api';
 import { exportFeatureBoard, loadReference } from './feature-export';
 import './feature-studio.css';
-import FeatureValidation, { useFeatureTests } from './FeatureValidation';
+import FeatureValidation, { DemoValidation, useFeatureTests } from './FeatureValidation';
+import OnboardingGuide from './OnboardingGuide';
+import { useOnboarding } from './useOnboarding';
 import LayoutDiagram from './LayoutDiagram';
 import FeatureSpecView, { FeatureSpecEditor, tierLabels } from './FeatureSpecView';
 import FeatureOverview from './FeatureOverview';
@@ -26,7 +28,8 @@ function Crop({ card, url, aspect }: { card: FeatureCard; url: string; aspect: n
 }
 export default function FeatureStudio() {
   const [bootstrap, setBootstrap] = useState<Bootstrap>();
-  const [boards, setBoards] = useState<FeatureBoard[]>([]), [board, setBoard] = useState<FeatureBoard>();
+  const [boards, setBoards] = useState<FeatureBoard[]>([]), [realBoard, setBoard] = useState<FeatureBoard>();
+  const [initialized,setInitialized] = useState(false);
   const [config, setConfig] = useState<ModelConfig>();
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [active, setActive] = useState(''), [editor, setEditor] = useState<FeatureCard>(), [locating, setLocating] = useState(false), [drag, setDrag] = useState<FeatureRegion>();
@@ -38,8 +41,14 @@ export default function FeatureStudio() {
   const upload = useRef<HTMLInputElement>(null), diagram = useRef<HTMLDivElement>(null), picture = useRef<HTMLImageElement>(null);
   const start = useRef<{ x: number; y: number } | undefined>(undefined);
   const exportedRef = useRef('');
-  const validation = useFeatureTests(board, bootstrap);
-  const locked = busy || validation.busy || saving || completing || board?.status === 'running';
+  const validation = useFeatureTests(realBoard, bootstrap);
+  const dialogOpen = (!!editor && !locating) || settings || !!evidence || !!exported || referencePreview;
+  const workspaceLocked = busy || validation.busy || saving || completing || realBoard?.status === 'running';
+  const tour = useOnboarding(initialized && validation.loaded && !workspaceLocked && !validation.running && !validation.anyTestRunning && !dialogOpen && !notice && !error, () => {
+    closeExport(); setEvidence(''); setBusy(false); setActive(''); setNotice('');
+  });
+  const board = tour.active ? tour.board : realBoard;
+  const locked = workspaceLocked || tour.loading || tour.step === 'extracting' || tour.step === 'validating';
   const view = board ? { ...board, cards: board.cards.map(card => editor?.id === card.id ? editor : card).sort((a, b) => featureOrder(a) - featureOrder(b)) } : undefined;
   const hasFoundationSpecs = !!board && ['style', 'typography', 'layout', 'palette'].every(kind => board.cards.some(card => card.tier === 'foundation' && card.foundation === kind && featureReady(card)));
   const selected = view ? selectedFeatures(view) : [];
@@ -70,6 +79,7 @@ export default function FeatureStudio() {
         }else {localStorage.removeItem('define-pretty-card-completion');setError('卡片已更新，未自动恢复旧的补全草稿。');}
       }catch(cause){localStorage.removeItem('define-pretty-card-completion');setError(errorMessage(cause));} }
     } catch(cause) { if (live) setError(errorMessage(cause)); }
+    finally { if(live)setInitialized(true); }
   })(); return () => { live = false; }; }, []);
   useEffect(()=>{if(!completion || completion.status!=='running')return;let live=true;
     const poll=()=>api<FeatureCompletion>(`/feature-completions/${completion.id}`).then(next=>{if(!live)return;setCompletion(next);
@@ -89,11 +99,10 @@ export default function FeatureStudio() {
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 5000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => { if(config) localStorage.setItem('define-pretty-feature-config', JSON.stringify({ model: config.model, reasoningEffort: config.reasoningEffort })); }, [config]);
   useEffect(() => () => { if (exportedRef.current) URL.revokeObjectURL(exportedRef.current); }, []);
-  useEffect(() => { const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !completing) { setLocating(false); setDrag(undefined); start.current = undefined; if (!locating) { closeEditor(); setSettings(false); setEvidence(''); setReferencePreview(false); closeExport(); } } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [locating,completing]);
+  useEffect(() => { const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !completing && !tour.active) { setLocating(false); setDrag(undefined); start.current = undefined; if (!locating) { closeEditor(); setSettings(false); setEvidence(''); setReferencePreview(false); closeExport(); } } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [locating,completing,tour.active]);
 
-  const dialogOpen = (!!editor && !locating) || settings || !!evidence || !!exported || referencePreview;
   useEffect(() => {
-    if (!dialogOpen) return;
+    if (!dialogOpen || tour.active) return;
     const previous = document.activeElement as HTMLElement | null;
     const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
     const dialog = dialogs[dialogs.length - 1];
@@ -107,32 +116,33 @@ export default function FeatureStudio() {
     };
     document.addEventListener('keydown', trap);
     return () => { document.removeEventListener('keydown', trap); previous?.focus(); };
-  }, [dialogOpen, !!evidence, !!exported, referencePreview]);
+  }, [dialogOpen, !!evidence, !!exported, referencePreview, tour.active]);
 
   async function save(next: FeatureBoard): Promise<boolean> {
+    if(tour.active)return false;
     setSaving(true); setError('');
     try { adopt(await api<FeatureBoard>(`/feature-boards/${next.id}`, { method: 'PUT', body: JSON.stringify({ revision: next.revision, title: next.title, cards: next.cards }) })); return true; }
     catch(cause) { setError(errorMessage(cause)); return false; } finally { setSaving(false); }
   }
-  async function uploadFile(file?: File) { if (!file || !config) return; await perform(async () => {
+  async function uploadFile(file?: File) { if (tour.active || !file || !config) return; await perform(async () => {
     const form = new FormData(); form.append('file', file);
     const reference = await api<ReferenceAsset>('/references', { method: 'POST', body: form });
     const next = await api<FeatureBoard>('/feature-boards', { method: 'POST', body: JSON.stringify({ referenceId: reference.id, config, title: file.name.replace(/\.[^.]+$/, '').slice(0, 90) || '我的视觉参考' }) });
     adopt(next); setEditor(undefined); setActive('');
   }); }
-  async function generate() { if (!board || !config) return; await perform(async () => {
+  async function generate() { if(tour.active){tour.simulate('extract');return;} if (!board || !config) return; await perform(async () => {
     // Every generation has a separate immutable input record; old cards remain selectable in history.
     const next = await api<FeatureBoard>('/feature-boards', { method: 'POST', body: JSON.stringify({ referenceId: board.reference.id, config, title: board.title }) });
     adopt(next);
     adopt(await api<FeatureBoard>(`/feature-boards/${next.id}/generate`, { method: 'POST' }));
   }); }
-  async function discoverDetails() { if(!board || !config)return;await perform(async()=>{
+  async function discoverDetails() { if(tour.active || !board || !config)return;await perform(async()=>{
     adopt(await api<FeatureBoard>(`/feature-boards/${board.id}/discover-details`,{method:'POST',body:JSON.stringify({revision:board.revision,config})}));
     setActive('');
   }); }
-  function toggle(card: FeatureCard) { if (board && !locked && !editor) void save({ ...board, cards: board.cards.map(c => c.id === card.id ? { ...c, selected: !c.selected } : c) }); }
+  function toggle(card: FeatureCard) { if(tour.active){tour.toggle(card.id);return;} if (board && !locked && !editor) void save({ ...board, cards: board.cards.map(c => c.id === card.id ? { ...c, selected: !c.selected } : c) }); }
   async function completeCard() {
-    if(!board||!editor||!config||completing||!regionConfirmed)return;
+    if(tour.active||!board||!editor||!config||completing||!regionConfirmed)return;
     setCompletionStarting(true);setError('');
     const draft=structuredClone(editor);
     try { const job=await api<FeatureCompletion>(`/feature-boards/${board.id}/complete-card`,{method:'POST',body:JSON.stringify({cardId:draft.id,revision:board.revision,title:draft.title,region:draft.region,config})});
@@ -141,11 +151,11 @@ export default function FeatureStudio() {
   }
   async function cancelCompletion() {if(!completion||completionCancelling)return;setCompletionCancelling(true);try{const next=await api<FeatureCompletion>(`/feature-completions/${completion.id}/cancel`,{method:'POST'});setCompletion(next);if(next.status==='completed'&&next.result)setEditor(current=>current?.id===next.cardId?mergeCompletion(current,next.result):current);}catch(cause){setError(errorMessage(cause));}finally{setCompletionCancelling(false);} }
   async function addGlobalCard() {
-    if (!board || board.cards.some(c => c.kind === 'global')) return;
+    if (tour.active || !board || board.cards.some(c => c.kind === 'global')) return;
     const card: FeatureCard = { id: crypto.randomUUID(), kind: 'global', title: GLOBAL_STYLE_TITLE, description: '', effect: '', instruction: '', applicability: '', selected: false, application: '', region: { ...FULL_IMAGE_REGION } };
     if (await save({ ...board, cards: [card, ...board.cards] })) { setEditor(card); setCompletion(undefined); setRegionConfirmed(true); setActive(card.id); }
   }
-  async function addCard() { if (!board) return; const card: FeatureCard = { id: crypto.randomUUID(), kind: 'local', tier: 'detail', discovery: 'detail', title: '我的设计特征', description: '', effect: '', instruction: '说明具体实现规则，以及什么情况下可以怎样调整。', adaptation: '', applicability: '', selected: false, application: '', region: { x: .25, y: .25, width: .5, height: .5 } };
+  async function addCard() { if (tour.active || !board) return; const card: FeatureCard = { id: crypto.randomUUID(), kind: 'local', tier: 'detail', discovery: 'detail', title: '我的设计特征', description: '', effect: '', instruction: '说明具体实现规则，以及什么情况下可以怎样调整。', adaptation: '', applicability: '', selected: false, application: '', region: { x: .25, y: .25, width: .5, height: .5 } };
     if (await save({ ...board, cards: [...board.cards, card] })) { setEditor(card); setCompletion(undefined);setRegionConfirmed(false);setLocating(true);setActive(card.id);diagram.current?.scrollIntoView({block:'center',behavior:'smooth'}); }
   }
   function position(e: PointerEvent) { const box = picture.current!.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)), y: Math.max(0, Math.min(1, (e.clientY - box.top) / box.height)) }; }
@@ -153,12 +163,29 @@ export default function FeatureStudio() {
   function pointerMove(e: PointerEvent<SVGSVGElement>) { if (!start.current) return; const p = position(e), s = start.current; setDrag({ x: Math.min(p.x,s.x), y: Math.min(p.y,s.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }); }
   function pointerUp(e: PointerEvent<SVGSVGElement>) { if (!start.current || !editor) return; const p = position(e), s = start.current; const r = { x: Math.min(p.x,s.x), y: Math.min(p.y,s.y), width: Math.abs(p.x-s.x), height: Math.abs(p.y-s.y) }; start.current = undefined; setDrag(undefined); if (r.width < .01 || r.height < .01) { setNotice('请拖出一个更大的矩形区域。'); return; } setEditor({ ...editor, region: r }); setRegionConfirmed(true);setLocating(false); }
   function closeExport() { if(exportedRef.current) URL.revokeObjectURL(exportedRef.current); exportedRef.current = ''; setExported(undefined); }
-  async function previewExport() { if (!board) return; const snapshot = structuredClone(board); await perform(async () => { const result = await exportFeatureBoard(snapshot); closeExport(); const url = URL.createObjectURL(result.blob); exportedRef.current = url; setExported({ url, width: result.width, height: result.height, reference: snapshot.reference, selectedCount: selectedFeatures(snapshot).length, instruction: featureInstruction(snapshot) }); }); }
-  async function copyInstruction(instruction = board ? featureInstruction(board) : '') { if (!instruction) return; try { await navigator.clipboard.writeText(instruction); setNotice('配套指令已复制，请和卡片图、无标记原图一起发给 AI。'); } catch { setEvidence(instruction); } }
+  async function previewExport() {
+    if (!board || (tour.active && tour.step !== 'export')) return;
+    const snapshot = structuredClone(board), guided = tour.active, session = tour.session.current;
+    setBusy(true); if(guided)tour.reportError('');else setError('');
+    try {
+      const result = await exportFeatureBoard(snapshot);
+      if (guided && tour.session.current !== session) return;
+      closeExport(); const url = URL.createObjectURL(result.blob); exportedRef.current = url;
+      setExported({ url, width: result.width, height: result.height, reference: snapshot.reference, selectedCount: selectedFeatures(snapshot).length, instruction: featureInstruction(snapshot) });
+      if(guided)tour.exported();
+    } catch(cause) { if(!guided)setError(errorMessage(cause));else if(tour.session.current === session)tour.reportError(errorMessage(cause)); }
+    finally { if(!guided || tour.session.current === session)setBusy(false); }
+  }
+  async function copyInstruction(instruction = board ? featureInstruction(board) : '') {
+    if (!instruction) return;
+    const guided=tour.active, session=tour.session.current;
+    try { await navigator.clipboard.writeText(instruction); if(!guided || tour.session.current===session)setNotice('配套指令已复制，请和卡片图、无标记原图一起发给 Codex。'); }
+    catch { if(!guided || tour.session.current===session)setEvidence(instruction); }
+  }
   function renderCard(card: FeatureCard, index: number) {
     const focused = active === card.id;
     return <article key={card.id} style={overviewCellStyle(placement.cards[index])} data-feature-number={index + 1} className={`feature-card feature-overview-card ${card.kind === 'global' ? 'feature-global-card' : ''} ${card.selected ? 'is-selected' : ''} ${focused ? 'is-focused' : ''}`} onMouseEnter={() => setActive(card.id)} onMouseLeave={() => setActive('')} onFocus={() => setActive(card.id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setActive(''); }}>
-      <div className="feature-card-head"><span className="feature-number">{index + 1}</span><label><input type="checkbox" checked={card.selected} disabled={locked || !!editor || !featureReady(card)} onChange={() => toggle(card)} /><span>{card.title}</span></label><button className="feature-icon" aria-label={`编辑${card.title}`} disabled={locked} onClick={() => { setEditor({ ...structuredClone(card), instruction: featureImplementation(card), adaptation: '' }); setCompletion(undefined);setRegionConfirmed(true);setActive(card.id); }}><Pencil size={15}/></button></div>
+      <div className="feature-card-head"><span className="feature-number">{index + 1}</span><label><input data-tour={index === 0 ? "select" : undefined} type="checkbox" checked={card.selected} disabled={locked || !!editor || !featureReady(card)} onChange={() => toggle(card)} /><span>{card.title}</span></label><button className="feature-icon" aria-label={`编辑${card.title}`} disabled={locked} onClick={() => { setEditor({ ...structuredClone(card), instruction: featureImplementation(card), adaptation: '' }); setCompletion(undefined);setRegionConfirmed(true);setActive(card.id); }}><Pencil size={15}/></button></div>
       <p className={`feature-tier-label is-${featureTier(card)}`}>{tierLabels[featureTier(card)]}</p>
       {!featureReady(card) && <p className="feature-global-pending">尚未提炼。点击「编辑要求」，使用 AI 补全或填写规则后再勾选。</p>}
       <FeatureOverview card={card} url={board!.reference.url} aspect={aspect}/>
@@ -167,16 +194,16 @@ export default function FeatureStudio() {
     </article>;
   }
 
-  return <div className="feature-app">
-    <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty <span className="feature-beta">视觉特征总览</span></a><div className="feature-header-actions"><a className="feature-quiet" href="#original-websites"><FlaskConical size={15}/>原始网页</a><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
+  return <div className={`feature-app${tour.active?' is-onboarding':''}`}>
+    <header className="feature-header"><a className="feature-brand" href="/"><span className="feature-logo"><Sparkles size={20}/></span>Define Pretty </a><div className="feature-header-actions"><button className="feature-button" disabled={!tour.canReplay} onClick={tour.start}>使用指引</button><button className="feature-button" onClick={() => setSettings(true)}><SlidersHorizontal size={16}/>生成设置</button></div></header>
     <main className="feature-main">
       <section className="feature-intro" aria-label="发现设计灵感">
         <img className="feature-intro-art" src="/assets/paper/xiaoshi-bear-hero.webp" alt="" aria-hidden="true" fetchPriority="high"/>
         <div className="feature-intro-copy">
-          <div className="feature-eyebrow">从「喜欢这个」到「借鉴这一点」</div>
-          <h1>把喜欢的设计，<br/>选出来。</h1>
-          <p>选择喜欢的视觉风格，保留关键关系，<br className="feature-intro-break"/>让 AI 为你的网站创作合适的素材。</p>
-          <button className="feature-intro-upload" aria-label="上传参考图开始挑选设计" disabled={locked || !config || !!editor} onClick={() => upload.current?.click()}>
+          <div className="feature-eyebrow">不再只会说「参考这张图」，而是</div>
+          <h1>把你喜欢的设计点，<br/>做成可选项。</h1>
+          <p>让 Codex 高精度地还原参考图的视觉特征，<br className="feature-intro-break"/>或有侧重点地美化现有的 Web UI。</p>
+          <button className="feature-intro-upload" data-tour="upload" aria-label="上传参考图开始挑选设计" disabled={locked || (!tour.active && !config) || !!editor} onClick={() => tour.active ? void tour.load() : upload.current?.click()}>
             <span><Upload size={15}/>上传一张喜欢的参考图</span><span className="feature-intro-upload-arrow"><ArrowUpRight size={18}/></span>
           </button>
         </div>
@@ -186,9 +213,9 @@ export default function FeatureStudio() {
       {notice && <div className="feature-notice" role="status">{notice}</div>}
       <input hidden ref={upload} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => { void uploadFile(e.target.files?.[0]); e.target.value = ''; }}/>
       <section className="feature-workbench">
-        <div className="feature-toolbar"><div className="feature-toolbar-title"><ImageIcon size={18}/>{boards.length ? <select aria-label="选择特征板" value={board?.id || ''} disabled={locked || !!editor} onChange={e => { const next = boards.find(b => b.id === e.target.value); if(next) { adopt(next); setActive(''); } }}>{boards.map(b => <option key={b.id} value={b.id}>{b.title}{b.generationMode==='details'?' · 补充细节':''} · {new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} · {statusText[b.status]}</option>)}</select> : <span>我的视觉参考</span>}<span className="feature-save">{saving ? '保存中…' : board ? '已保存到本地' : 'PNG / JPG / WebP'}</span></div><div className="feature-toolbar-actions"><button className="feature-button" disabled={locked || !config || !!editor} onClick={() => upload.current?.click()}><Upload size={15}/>{board ? '新参考图' : '上传参考图'}</button>{board && <button className="feature-button primary" disabled={locked || !config || !!editor || !imageReady || !bootstrap?.runtime.authenticated} onClick={() => void generate()}><Sparkles size={15}/>{board.cards.length ? '重新提炼基础与辨识特征' : '提炼基础与辨识特征'}</button>}</div></div>
+        <div className="feature-toolbar"><div className="feature-toolbar-title"><ImageIcon size={18}/>{tour.active ? <span>剪纸风格 · 快速体验</span> : boards.length ? <select aria-label="选择特征板" value={board?.id || ''} disabled={locked || !!editor} onChange={e => { const next = boards.find(b => b.id === e.target.value); if(next) { adopt(next); setActive(''); } }}>{boards.map(b => <option key={b.id} value={b.id}>{b.title}{b.generationMode==='details'?' · 补充细节':''} · {new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} · {statusText[b.status]}</option>)}</select> : <span>我的视觉参考</span>}<span className="feature-save">{tour.active ? '示例 · 不会保存到工作区' : saving ? '保存中…' : board ? '已保存到本地' : 'PNG / JPG / WebP'}</span></div><div className="feature-toolbar-actions"><button className="feature-button" disabled={locked || !config || !!editor} onClick={() => upload.current?.click()}><Upload size={15}/>{board ? '新参考图' : '上传参考图'}</button>{board && <button data-tour="extract" className="feature-button primary" disabled={locked || (!tour.active && (!config || !bootstrap?.runtime.authenticated)) || !!editor || !imageReady} onClick={() => void generate()}><Sparkles size={15}/>{board.cards.length ? '重新提炼基础与辨识特征' : '提炼基础与辨识特征'}</button>}</div></div>
         {!board ? <div className="feature-empty" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if(!busy) void uploadFile(e.dataTransfer.files[0]); }}><div className="feature-empty-art"><span/><span/><div><ImageIcon size={48}/><i>你的灵感，从一张图开始</i></div></div><h2>放入一张你喜欢的 UI 截图</h2><p>AI 默认生成四类基础规范与图中辨识特征，精细细节按需补充。<br/>你来选择哪些值得带走。</p><button className="feature-button primary" disabled={!config || busy} onClick={() => upload.current?.click()}><Upload size={17}/>选择参考图</button><small>或将图片拖到这里 · 最大 10 MB</small></div> : <>
-          <div className="feature-subtoolbar"><span><MousePointer2 size={14}/>{board.cards.length ? `${board.cards.length} 个可借鉴特征 · 从总览勾选想要采纳的设计` : '先生成特征卡片，或手动添加你喜欢的一点'}</span><div>{board.cards.length>0&&<button disabled={locked || !!editor || !config || !bootstrap?.runtime.authenticated || board.cards.filter(c=>c.kind!=='global').length>=12} onClick={()=>void discoverDetails()}><Sparkles size={14}/>发现更多细节</button>}<button disabled={locked || !!editor || board.cards.filter(c => c.kind !== 'global').length >= 12} onClick={() => void addCard()}><Plus size={14}/>手动添加</button><button disabled={locked || !!editor || !board.cards.length} onClick={() => void save({ ...board, cards: board.cards.map(c => ({ ...c, selected: featureReady(c) && selected.length !== board.cards.filter(featureReady).length })) })}>{selected.length === board.cards.filter(featureReady).length && selected.length ? <Square size={14}/> : <CheckCheck size={14}/>} {selected.length === board.cards.filter(featureReady).length && selected.length ? '取消全选' : '全选'}</button></div></div>
+          <div className="feature-subtoolbar"><span><MousePointer2 size={14}/>{board.cards.length ? `${board.cards.length} 个可借鉴特征 · 勾选想要采纳的设计` : '先生成特征卡片，或手动添加你喜欢的一点'}</span><div>{board.cards.length>0&&<button disabled={locked || !!editor || !config || !bootstrap?.runtime.authenticated || board.cards.filter(c=>c.kind!=='global').length>=12} onClick={()=>void discoverDetails()}><Sparkles size={14}/>发现更多细节</button>}<button disabled={locked || !!editor || board.cards.filter(c => c.kind !== 'global').length >= 12} onClick={() => void addCard()}><Plus size={14}/>手动添加特征</button><button disabled={locked || !!editor || !board.cards.length} onClick={() => void save({ ...board, cards: board.cards.map(c => ({ ...c, selected: featureReady(c) && selected.length !== board.cards.filter(featureReady).length })) })}>{selected.length === board.cards.filter(featureReady).length && selected.length ? <Square size={14}/> : <CheckCheck size={14}/>} {selected.length === board.cards.filter(featureReady).length && selected.length ? '取消全选' : '全选'}</button></div></div>
           {!board.cards.some(c => c.kind === 'global') && board.status !== 'running' && <div className="feature-global-intro"><div><strong>整体视觉风格</strong><p>补充整体风格，协调配色、文字与视觉重心。</p></div><button className="feature-button" disabled={locked || !!editor} onClick={() => void addGlobalCard()}><Plus size={14}/>补充整体视觉风格</button></div>}
           {board.generationMode==='details'&&board.status==='completed'&&<p className="feature-discovery-note" role="status">{board.addedDetails ? `新增 ${board.addedDetails} 个可选细节，默认未选中。原有卡片及勾选保留。` : '没有发现值得单独补充的新细节，原有卡片及勾选保留。'}</p>}
           {board.cards.length > 0 && <p className="feature-discovery-note">总览展示视觉重点；完整实施细节随所选特征写入配套指令。</p>}
@@ -198,7 +225,7 @@ export default function FeatureStudio() {
           {locating && <div className="feature-locate-banner">在参考图上拖出「{editor?.title}」的区域。<button onClick={() => { setLocating(false); setDrag(undefined); start.current = undefined; }}>返回编辑</button></div>}
           <div className={`feature-overview-board ${locating ? 'is-locating' : ''}`} aria-label="视觉特征总览">
             {view?.cards.map(renderCard)}
-            <div className="feature-reference feature-overview-reference" style={overviewCellStyle(placement.reference)} ref={diagram}>
+            <div data-tour="reference" className="feature-reference feature-overview-reference" style={overviewCellStyle(placement.reference)} ref={diagram}>
               <div className="feature-reference-label"><span>参考画面</span><button type="button" className="feature-button" disabled={!imageReady || locating} onClick={() => setReferencePreview(true)}><Maximize2 size={14}/>查看原图</button></div>
               <div className="feature-overview-reference-stage"><div className="feature-image-wrap" style={{ width: `min(100%, calc(var(--reference-height, 760px) * ${aspect}))` }}><img ref={picture} src={board.reference.url} alt="参考 UI 截图" draggable={false}/><svg className="feature-regions" viewBox={`0 0 1000 ${1000/aspect}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { start.current = undefined; setDrag(undefined); }} style={{ touchAction: locating ? 'none' : 'auto' }}>
                 {view?.cards.map((card, index) => active === card.id ? <g key={card.id} className={`${card.kind === 'global' ? 'global-region' : ''} on`}><title>{card.title}</title><rect x={card.region.x*1000} y={card.region.y*1000/aspect} width={card.region.width*1000} height={card.region.height*1000/aspect}/><foreignObject x={Math.min(card.region.x*1000,950)} y={Math.min(card.region.y*1000/aspect,1000/aspect-40)} width="50" height="60"><span className="feature-image-number">{index+1}</span></foreignObject></g> : null)}
@@ -210,9 +237,10 @@ export default function FeatureStudio() {
           <div className="feature-board-meta"><span>原图：{board.reference.name}</span><button disabled={busy} onClick={() => void perform(async () => { const value = await api<Record<string, unknown>>(`/feature-boards/${board.id}/evidence`); setEvidence(JSON.stringify(value,null,2)); })}><FileText size={13}/>生成记录</button></div>
         </>}
       </section>
-      <FeatureValidation state={validation}/>
+      <div hidden={tour.active}><FeatureValidation state={validation}/></div>
+      {tour.active && board && <DemoValidation origin={validation.origin} ready={['result','export','copy'].includes(tour.step || '')}/>}
     </main>
-    <footer className="feature-selection"><div><span className="feature-selected-count">{selected.length.toString().padStart(2,'0')}</span><div><strong>{selected.length ? '个特征已选中' : '选择你想借鉴的特征'}</strong><span>{selected.length ? selected.map(c => c.title).join(' · ') : '导出图片只包含所选卡片及其标注'}</span></div></div><div><button className="feature-button" disabled={!selected.length || locked || !!editor} onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady} onClick={() => void previewExport()}>{busy ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>}预览并导出图片</button><button className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady || !validation.ready || validation.running} onClick={() => void validation.start()}><FlaskConical size={16}/>{validation.busy ? '准备测试…' : validation.running ? '测试进行中' : '测试所选设计'}</button></div></footer>
+    <footer className="feature-selection"><div><span className="feature-selected-count">{selected.length.toString().padStart(2,'0')}</span><div><strong>{selected.length ? '个特征已选中' : '选择你想借鉴的特征'}</strong><span>{selected.length ? selected.map(c => c.title).join(' · ') : '导出图片只包含所选卡片及其标注'}</span></div></div><div><button className="feature-button" disabled={!selected.length || locked || !!editor} onClick={() => void copyInstruction()}><Copy size={16}/>复制配套指令</button><button data-tour="export" className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady} onClick={() => void previewExport()}>{busy ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>}预览并导出图片</button><button data-tour="validate" className="feature-button primary" disabled={!selected.length || locked || !!editor || !imageReady || (!tour.active && (!validation.ready || validation.running))} onClick={() => tour.active ? tour.simulate('validate') : void validation.start()}><FlaskConical size={16}/>{validation.busy ? '准备验证…' : validation.running ? '验证进行中' : '验证所选设计'}</button></div></footer>
     {editor && !locating && <div className="feature-overlay" onMouseDown={e => { if(e.target === e.currentTarget) closeEditor(); }}><section className="feature-drawer" role="dialog" aria-modal="true" aria-label="编辑特征卡片"><div className="feature-dialog-head"><div><small>FEATURE DETAILS</small><h2>编辑这个特征</h2></div><button aria-label="关闭编辑" disabled={completing} onClick={closeEditor}><X/></button></div><div className="feature-ai-complete"><div><strong>{editor.kind === 'global' ? '根据完整参考图提炼整体视觉风格' : '根据选区与一句话特征补全'}</strong><p>{editor.tier === 'foundation' || editor.spec ? 'AI 会补全规则与具体属性值，表格和图示同步更新；检查后再保存。重新补全会替换这些内容。' : editor.kind === 'layout' ? 'AI 会补全规则、比例与计算范围，图示同步更新；检查后再保存。重新补全会替换这些内容。' : 'AI 生成图中依据和下方三段内容，检查后再保存。重新补全会替换表单中的这些内容。'}</p><small>使用生成设置：{config?.model} · {config?.reasoningEffort}</small></div>{completing ? <><span role="status"><LoaderCircle className="spin" size={15}/>正在补全…</span><button className="feature-button" disabled={!completion || completionStarting || completionCancelling} onClick={()=>void cancelCompletion()}>取消补全</button></> : <button className="feature-button primary" disabled={saving || !config || !bootstrap?.runtime.authenticated || !imageReady || !regionConfirmed || !editor.title.trim() || editor.title.trim()==='我的设计特征'} onClick={()=>void completeCard()}><Sparkles size={15}/>AI 补全</button>}{!regionConfirmed&&<p>请先在参考图上框选区域。</p>}{completion?.status==='completed'&&<p role="status">已填入补全草稿，请检查并保存。</p>}{completion?.error&&<p role="alert">{completion.error}</p>}</div><form onSubmit={e => { e.preventDefault(); if(board && !completing) void save({ ...board, cards: board.cards.map(c => c.id === editor.id ? editor : c) }).then(ok => { if(ok) closeEditor(); }); }}><fieldset disabled={completing || saving}>
       <label>一句话特征 <span>说明某处设计最值得借鉴的做法</span><input autoFocus readOnly={editor.kind === 'global' || editor.tier === 'foundation'} value={editor.title} maxLength={60} required onChange={e => setEditor({ ...editor, title: e.target.value })}/></label>
       <label>应用到我的哪里 <span>选填</span><input placeholder={editor.kind === 'global' ? '默认整页；也可以指定某个完整区域' : editor.kind === 'layout' ? '默认按此结构匹配内容，也可限定应用范围' : '例如：任务列表卡片 / 顶部导航'} maxLength={200} value={editor.application} onChange={e => setEditor({ ...editor, application: e.target.value })}/></label>
@@ -228,8 +256,9 @@ export default function FeatureStudio() {
       {error && <p role="alert" className="feature-inline-error">{error}</p>}<div className="feature-dialog-actions"><button type="button" className="feature-button danger" disabled={saving || editor.kind === 'global' || editor.tier === 'foundation'} onClick={() => { if(board) void save({ ...board, cards: board.cards.filter(c => c.id !== editor.id) }).then(ok => { if(ok) closeEditor(); }); }}><Trash2 size={15}/>删除卡片</button><button className="feature-button primary" disabled={saving} type="submit"><Check size={16}/>保存修改</button></div>
       </fieldset></form></section></div>}
     {settings && <div className="feature-overlay"><section className="feature-modal" role="dialog" aria-modal="true" aria-label="生成设置"><div className="feature-dialog-head"><h2>生成设置</h2><button aria-label="关闭设置" onClick={() => setSettings(false)}><X/></button></div><p>用于特征提炼和 AI 补全。默认生成一级的四类基础规范，以及二级的图中辨识特征；级别用于组织与检查，估计和建议值可按实际效果校准。三级精细细节通过「发现更多细节」按需生成。卡片由你勾选，新增细节默认未选中。更新后对下一次生成生效，旧结果保持原配置。</p>{config && <ModelSettings config={config} models={bootstrap?.models || []} localModel={bootstrap?.defaults.config.model} error={bootstrap?.modelCatalogError} onChange={setConfig}/>}<p className="feature-muted">复用本地 Codex 登录 · 单次最长 30 分钟<br/>{bootstrap?.runtime.version}</p><button className="feature-button primary" onClick={() => setSettings(false)}>完成</button></section></div>}
-    {exported && <div className="feature-overlay"><section className="feature-export-modal" role="dialog" aria-modal="true" aria-label="导出图片预览"><div className="feature-dialog-head"><div><h2>带走你选中的设计特征</h2><p>{exported.selectedCount} 个特征 · 视觉总览 PNG · {exported.width} × {exported.height} px</p></div><button aria-label="关闭导出" onClick={closeExport}><X/></button></div><p className="feature-export-note">总览图展示已选设计的视觉重点，配套指令包含完整参数、实施细节与应用要求。请将总览图、无标记原图和配套指令一起交给 AI。</p><div className="feature-export-image"><img src={exported.url} alt="仅包含已选特征的视觉总览图"/></div><div className="feature-dialog-actions"><button className="feature-button" onClick={() => void copyInstruction(exported.instruction)}><Copy size={16}/>复制配套指令</button><a className="feature-button" download={exported.reference.name} href={exported.reference.url}><Download size={16}/>下载无标记原图</a><a className="feature-button primary" download={`Define-Pretty-${new Date().toISOString().slice(0,10)}.png`} href={exported.url}><Download size={16}/>下载总览 PNG</a></div></section></div>}
+    {exported && <div className="feature-overlay"><section className="feature-export-modal" role="dialog" aria-modal="true" aria-label="导出图片预览"><div className="feature-dialog-head"><div><h2>带走你选中的设计特征</h2><p>{exported.selectedCount} 个特征 · 视觉总览 PNG · {exported.width} × {exported.height} px</p></div><button aria-label="关闭导出" onClick={closeExport}><X/></button></div><p className="feature-export-note">总览图展示已选设计的视觉重点，配套指令包含完整参数、实施细节与应用要求。请将总览图、无标记原图和配套指令一起交给 AI。</p><div className="feature-export-image"><img src={exported.url} alt="仅包含已选特征的视觉总览图"/></div><div className="feature-dialog-actions"><button data-tour="copy" className="feature-button" onClick={() => void copyInstruction(exported.instruction)}><Copy size={16}/>复制配套指令</button><a className="feature-button" download={exported.reference.name} href={exported.reference.url}><Download size={16}/>下载无标记原图</a><a className="feature-button primary" download={`Define-Pretty-${new Date().toISOString().slice(0,10)}.png`} href={exported.url}><Download size={16}/>下载总览 PNG</a>{tour.active && evidence && <label className="onboarding-manual-copy">浏览器未能自动复制，请手动复制：<textarea aria-label="手动复制配套指令" readOnly value={evidence} onFocus={event => event.currentTarget.select()}/></label>}</div></section></div>}
     {referencePreview && board && <div className="feature-overlay" onMouseDown={event => { if (event.target === event.currentTarget) setReferencePreview(false); }}><section className="feature-reference-modal" role="dialog" aria-modal="true" aria-label="参考原图预览"><div className="feature-dialog-head"><div><h2>参考原图</h2><p>{board.reference.name}</p></div><button aria-label="关闭原图预览" onClick={() => setReferencePreview(false)}><X/></button></div><div className="feature-reference-full"><img src={board.reference.url} alt="无标记参考原图"/></div></section></div>}
-    {evidence && <div className="feature-overlay"><section className="feature-modal evidence" role="dialog" aria-modal="true" aria-label="生成记录"><div className="feature-dialog-head"><h2>记录与指令</h2><button aria-label="关闭记录" onClick={() => setEvidence('')}><X/></button></div><pre>{evidence}</pre></section></div>}
+    {evidence && !tour.active && <div className="feature-overlay"><section className="feature-modal evidence" role="dialog" aria-modal="true" aria-label="生成记录"><div className="feature-dialog-head"><h2>记录与指令</h2><button aria-label="关闭记录" onClick={() => setEvidence('')}><X/></button></div><pre>{evidence}</pre></section></div>}
+    {tour.step && <OnboardingGuide step={tour.step} loading={tour.loading || (tour.step === 'export' && busy)} error={tour.error} onNext={tour.next} onRetry={() => tour.step === 'export' ? void previewExport() : void tour.load()} onFinish={tour.finish}/>}
   </div>;
 }

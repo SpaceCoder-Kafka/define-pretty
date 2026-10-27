@@ -1,0 +1,21 @@
+.onboarding-guide{position:relative;z-index:1000;font-family:inherit;color:#292b2f}
+.onboarding-shade{position:fixed;inset:0;z-index:1000;pointer-events:none}
+.onboarding-shade path{fill:#202830b8;pointer-events:auto}
+.onboarding-highlight{position:fixed;z-index:1001;border:2px solid #e7b14c;border-radius:8px;box-shadow:0 0 0 3px #fff8e64d;pointer-events:none}
+.onboarding-tip{position:fixed;z-index:1002;width:min(340px,calc(100vw - 24px));padding:20px;background:#f8f6ef url('/assets/paper/fibers-light.svg');border:1px solid #d5c8a9;border-radius:8px;box-shadow:0 12px 48px #10182040;max-height:calc(100dvh - 24px);overflow:auto}
+.onboarding-meta{display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:11px;color:#6b6a64;letter-spacing:.4px}
+.onboarding-meta button{display:flex;align-items:center;gap:4px;color:#6b6a64;padding:4px;font-size:12px;white-space:nowrap}
+.onboarding-tip h2{font-size:19px;margin:15px 0 10px;letter-spacing:-.4px;line-height:1.5}
+.onboarding-tip p{font-size:13px;line-height:1.85;margin:0;color:#5f625f}
+.onboarding-next{margin-top:18px;float:right}
+.onboarding-tip button:focus-visible{outline:2px solid #306ce5;outline-offset:3px}
+.onboarding-status{display:flex;align-items:center;gap:8px;margin-top:12px!important}
+.onboarding-error{margin-top:12px;padding:12px;background:#f7e6d8;border-radius:4px}.onboarding-error button{margin-top:10px}
+.feature-app.is-onboarding .feature-test-pair{pointer-events:none}
+.feature-app.is-onboarding .feature-validation{margin-bottom:300px}
+.feature-app.is-onboarding [data-tour="result"]{scroll-margin-top:24px}
+.feature-app.is-onboarding .feature-reference-empty{visibility:hidden}
+.feature-app.is-onboarding .feature-export-modal .feature-dialog-actions{scroll-margin:16px}
+.onboarding-manual-copy{margin-top:12px;width:100%;font-size:12px}.onboarding-manual-copy textarea{display:block;width:100%;height:100px;padding:10px;font-size:12px;line-height:1.6;margin-top:8px}
+@media(max-width:600px){.onboarding-tip{padding:16px}.onboarding-tip h2{font-size:18px}.onboarding-tip p{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.onboarding-guide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

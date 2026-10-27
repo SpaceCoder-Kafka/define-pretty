@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">可平铺的轻纸纤维</title>
+  <desc id="desc">由两层周期性分形噪声生成的低对比半透明纸纹，不含位图或外部图像。</desc>
+  <defs>
+    <filter id="grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".72 .27" numOctaves="3" seed="83" stitchTiles="stitch" result="fine"/>
+      <feColorMatrix in="fine" type="matrix" values="0 0 0 0 .16  0 0 0 0 .17  0 0 0 0 .18  .035 .035 .035 0 0" result="fibers"/>
+      <feTurbulence type="fractalNoise" baseFrequency=".045 .08" numOctaves="2" seed="97" stitchTiles="stitch" result="soft"/>
+      <feColorMatrix in="soft" type="matrix" values="0 0 0 0 .96  0 0 0 0 .95  0 0 0 0 .93  .018 .018 .018 0 0" result="flecks"/>
+      <feMerge><feMergeNode in="fibers"/><feMergeNode in="flecks"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M0 0h220v220H0Z" filter="url(#grain)"/>
+</svg>

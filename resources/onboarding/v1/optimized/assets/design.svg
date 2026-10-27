@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">让界面清晰的日常习惯</title>
+  <desc id="desc">蓝色与暖白排版纸片层叠，芥黄短尺放在一侧，炭黑笔触强调留白。</desc>
+  <defs>
+    <filter id="paper" x="-15%" y="-15%" width="135%" height="140%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".64 .19" numOctaves="3" seed="11" result="grain"/>
+      <feColorMatrix in="grain" type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feBlend in="SourceGraphic" mode="multiply"/>
+      <feDropShadow dx=".8" dy="1.6" stdDeviation="1.2" flood-color="#292B2F" flood-opacity=".13"/>
+    </filter>
+  </defs>
+  <path d="M44 53 139 45 143 49 152 158 148 162 55 169 51 165Z" fill="#82917F" filter="url(#paper)"/>
+  <path d="M60 39 158 44 155 52 150 166 145 171 52 163 56 104Z" fill="#5C8AAC" filter="url(#paper)"/>
+  <g filter="url(#paper)">
+    <path d="M72 56 163 63 161 94 158 99 155 180 108 177 65 171 68 122Z" fill="#F6F3EC"/>
+    <path d="m82 76 57 4-1 16-57-4Z" fill="#5C8AAC"/>
+    <path d="m79 107 26 2-2 42-27-3Z" fill="#82917F"/>
+    <path d="m115 111 30 2m-31 10 24 2m-25 11 29 2m-30 11 17 1" stroke="#292B2F" stroke-opacity=".4" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <g transform="rotate(9 168 137)" filter="url(#paper)">
+    <path d="m160 91 18-1 2 91-19 2-2-32Z" fill="#D9A947"/>
+    <path d="m161 104 7-.2m-7 12 4-.1m-4 12 7-.2m-7 12 4-.1m-4 12 7-.2m-7 12 4-.1" stroke="#292B2F" stroke-opacity=".65" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <path d="m39 78-9-3m14-10-5-9m137-5 8-7" stroke="#292B2F" stroke-width="2.8" stroke-linecap="round"/>
+</svg>

@@ -8,6 +8,7 @@ import { FileStore } from './store.ts';
 import { FeatureBoards } from './feature-boards.ts';
 import { FeatureTests } from './feature-tests.ts';
 import { FeatureCompletions } from './feature-completions.ts';
+import { onboardingDirectory, readOnboardingDemo } from './onboarding-demo.ts';
 import { createSessionToken, detectImageType, localRequestGuard, previewHeaders, requireSafeId, safeFilePath } from './security.ts';
 async function readText(file: string, limit = 256 * 1024): Promise<string> {
   try {
@@ -24,6 +25,7 @@ export interface AppOptions {
   store: FileStore; consolePort: number; previewOrigin: string;
   config: Bootstrap['defaults']['config']; runtime: Bootstrap['runtime']; token?: string;
   models?: Bootstrap['models']; modelCatalogError?: string;
+  onboardingDirectory?: string;
 }
 
 export function createApp(options: AppOptions): Express {
@@ -33,6 +35,12 @@ export function createApp(options: AppOptions): Express {
   app.disable('x-powered-by');
   app.use('/api', localRequestGuard(consolePort, token));
   app.use('/api', express.json({ limit: '512kb' }));
+  const demoDirectory = options.onboardingDirectory ?? onboardingDirectory;
+  app.get('/api/onboarding-availability', (_req, res) => res.json({ busy: !!(options.featureBoards?.busy || options.featureTests?.busy || options.featureCompletions?.busy) }));
+  app.get('/api/onboarding-demo', async (_req, res) => res.json(await readOnboardingDemo(demoDirectory)));
+  app.get('/api/onboarding-demo/reference', async (_req, res) => {
+    res.type('jpg').sendFile(await safeFilePath(demoDirectory, 'reference.jpg'));
+  });
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 } });
 
   const tests = () => { if (!options.featureTests) fail('验证区域尚未启用。',503); return options.featureTests!; };
@@ -116,10 +124,15 @@ export function createApp(options: AppOptions): Express {
   return app;
 }
 
-export function createPreviewApp(consolePort: number, featureTests?: FeatureTests): Express {
+export function createPreviewApp(consolePort: number, featureTests?: FeatureTests, demoDirectory = onboardingDirectory): Express {
   const app = express();
   app.disable('x-powered-by');
   app.use(previewHeaders(consolePort));
+  app.get(/^\/onboarding\/v1\/(original|optimized)\/(.*)$/, async (req, res) => {
+    const file = await safeFilePath(path.join(demoDirectory, req.params[0]), req.params[1] || 'index.html');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.sendFile(file);
+  });
   app.get(/^\/feature-tests\/(sources|runs|source-runs)\/([a-zA-Z0-9_-]+)\/(.*)$/, async (req,res) => {
     if(!featureTests) fail('验证区域尚未启用。',404);
     const id=requireSafeId(req.params[1]); let directory: string;
