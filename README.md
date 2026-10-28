@@ -74,16 +74,16 @@
 
 先安装 **[Node.js](https://nodejs.org/) 22.12 或更新版本**，其中已包含 npm 和 npx。
 
-从本仓库的 **[Releases](https://github.com/SpaceCoder-Kafka/define-pretty/releases)** 下载 `define-pretty.tgz`，在下载目录打开终端，执行：
+在任意目录打开终端，复制执行这一条命令：
 
 ```sh
-npx --yes --package ./define-pretty.tgz define-pretty
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz
 ```
 
-浏览器会自动打开工作台。保持终端运行；使用结束后按 **Ctrl+C** 退出。若浏览器没有自动打开，访问终端显示的地址即可。
+首次运行会自动下载发布包和依赖，然后在浏览器中打开工作台。保持终端运行；使用结束后按 **Ctrl+C** 退出。若浏览器没有自动打开，访问终端显示的地址即可。
 
 <details>
-<summary>尚未下载发布包？也可以从源码启动</summary>
+<summary>从源码启动（开发者）</summary>
 
 下载或克隆本仓库，在项目目录执行：
 
@@ -115,7 +115,7 @@ codex login
 网页截图和验证会使用电脑上的 Chrome、Edge 或 Chromium。若提示没有可用浏览器，可执行：
 
 ```sh
-npx --yes --package ./define-pretty.tgz define-pretty --install-browser
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz --install-browser
 ```
 
 ## 操作指引
@@ -189,7 +189,7 @@ npx --yes --package ./define-pretty.tgz define-pretty --install-browser
 先确认 Node.js 版本，以及 Codex CLI 是否安装并登录。也可以运行环境检查：
 
 ```sh
-npx --yes --package ./define-pretty.tgz define-pretty --doctor
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz --doctor
 ```
 
 安装或更新 Codex、修改登录后，请重启工作台。当前发布检查覆盖 macOS 和 Linux，Windows 尚未完成同等验证。

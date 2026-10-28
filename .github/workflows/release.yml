@@ -76,7 +76,7 @@ jobs:
           const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${tag}/define-pretty.tgz`;
           await writeFile('.release/notes.md', [
             '需要 Node.js >= 22.12。复制以下命令启动，浏览器会自动打开：', '',
-            '```sh', `npx --yes --package=${url} define-pretty`, '```', '',
+            '```sh', `npx --yes ${url}`, '```', '',
             '真实生成需安装并登录 Codex CLI；未登录可先体验内置使用指引。',
             '截图验证需要 Chrome / Edge，或在启动命令末尾添加 --install-browser。',
             '本地历史保存在固定用户数据目录；按 Ctrl+C 停止。',

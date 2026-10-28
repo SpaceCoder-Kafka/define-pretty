@@ -74,16 +74,16 @@ The overview contains only your selected features. Give it to your AI assistant 
 
 Install **[Node.js](https://nodejs.org/) 22.12 or later**, which includes npm and npx.
 
-Download `define-pretty.tgz` from this repository's **[Releases](https://github.com/SpaceCoder-Kafka/define-pretty/releases)**, open a terminal in the download directory, and run:
+Open a terminal in any directory, then copy and run this single command:
 
 ```sh
-npx --yes --package ./define-pretty.tgz define-pretty
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz
 ```
 
-The workbench opens automatically in your browser. Keep the terminal running; press **Ctrl+C** when you are done. If the browser does not open, visit the address printed in the terminal.
+The first run automatically downloads the release package and dependencies, then opens the workbench in your browser. Keep the terminal running; press **Ctrl+C** when you are done. If the browser does not open, visit the address printed in the terminal.
 
 <details>
-<summary>No release package yet? You can also run from source</summary>
+<summary>Run from source (for developers)</summary>
 
 Download or clone this repository, then run these commands in the project directory:
 
@@ -115,7 +115,7 @@ Then restart Define Pretty. It uses your existing local Codex login and configur
 Page screenshots and validation use Chrome, Edge, or Chromium installed on your computer. If no compatible browser is found, run:
 
 ```sh
-npx --yes --package ./define-pretty.tgz define-pretty --install-browser
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz --install-browser
 ```
 
 ## How to Use
@@ -191,7 +191,7 @@ Reference images, cards, and task history are saved locally and remain available
 Check your Node.js version and make sure Codex CLI is installed and signed in. You can also run the environment check:
 
 ```sh
-npx --yes --package ./define-pretty.tgz define-pretty --doctor
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz --doctor
 ```
 
 Restart the workbench after installing or updating Codex, or changing your login. Release checks currently cover macOS and Linux; equivalent validation has not yet been completed for Windows.

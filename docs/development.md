@@ -72,8 +72,10 @@ npx --yes --package ./.release/define-pretty.tgz define-pretty
 将 `define-pretty.tgz` 和 `SHA256SUMS` 上传到 GitHub Release 后，用户可以一条命令下载并启动，无需 npm 账号或 npm registry 发布：
 
 ```sh
-npx --yes --package=https://github.com/SpaceCoder-Kafka/define-pretty/releases/latest/download/define-pretty.tgz define-pretty
+npx --yes https://github.com/SpaceCoder-Kafka/define-pretty/releases/download/v0.1.0/define-pretty.tgz
 ```
+
+命令使用具体版本的下载地址。发布新版本时，同步更新中英文 README 中的版本号，避免 npx 对固定 `latest/download` 地址的缓存导致旧版本复用。
 
 `.github/workflows/release.yml` 在推送、PR 和手动触发时执行 macOS / Linux 验证；推送与 `package.json` 版本一致的标签（如 `v0.1.0`）时，测试通过后创建带安装命令的 **GitHub Release 草稿**。维护者检查草稿后发布。手动触发仅构建并上传工作流产物。
 
