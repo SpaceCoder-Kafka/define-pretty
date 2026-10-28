@@ -1,4 +1,5 @@
-# Define Pretty
+
+# <p align="center">Define Pretty（翻译翻译，什么叫好看）</p>
 
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
 
