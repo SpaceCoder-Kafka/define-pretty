@@ -17,7 +17,7 @@ for (const required of ['bin/define-pretty.js', 'dist/server/core.js', 'dist/ser
   assert(files.includes(required), `Package is missing ${required}`);
 }
 assert(!files.some(file => /(^|\/)(\.data|\.test-data|\.git|node_modules|\.env)(\/|$)|\.test\.|\.jsonl$/.test(file)), 'Package contains private data, dependencies, or tests');
-assert(files.every(file => ['package.json', 'README.md'].includes(file) || /^(bin|dist)\//.test(file)), 'Unexpected package contents');
+assert(files.every(file => ['package.json', 'README.md', 'README.en.md'].includes(file) || /^(bin|dist)\//.test(file)), 'Unexpected package contents');
 console.log('✓ 发布包完整，未包含工作数据、日志或开发源码。');
 
 const sandbox = await mkdtemp(path.join(tmpdir(), 'define pretty package '));
