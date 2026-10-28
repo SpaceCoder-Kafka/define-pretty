@@ -1,12 +1,18 @@
 # Define Pretty
 
-[简体中文](README.md) · English
+<p align="center"><a href="README.md">简体中文</a> · English</p>
 
-**Turn the design details you love into selectable options.**
+<p align="center"><strong>Turn the design details you love into selectable options.</strong></p>
 
-Upload a UI screenshot you like and let Codex extract its colors, typography, layout, and more. Select the elements you want to borrow, then give Codex the resulting visual specifications and instructions to reproduce the reference's visual characteristics with high fidelity.
+<p align="center">
+Upload a UI screenshot you like and let Codex extract its colors, typography, layout, and more.<br>
+Select the elements you want to borrow, then give Codex the resulting visual specifications and instructions<br>
+to reproduce the reference's visual characteristics with high fidelity.
+</p>
 
-[Showcase](#showcase) · [Quick Start](#quick-start) · [How to Use](#how-to-use) · [FAQ](#faq)
+<p align="center">
+<a href="#showcase">Showcase</a> · <a href="#quick-start">Quick Start</a> · <a href="#how-to-use">How to Use</a> · <a href="#faq">FAQ</a>
+</p>
 
 ## Showcase
 
@@ -20,22 +26,22 @@ Upload a UI screenshot you like and let Codex extract its colors, typography, la
   </thead>
   <tbody>
     <tr>
-      <td valign="top"><strong>Personal Blog · City Illustrations</strong><br><br><a href="docs/images/showcase/blog/original.jpg"><img src="docs/images/showcase/blog/original.jpg" width="300" alt="Original personal blog with blue-purple gradients and article cards"></a></td>
+      <td valign="top"><a href="docs/images/showcase/blog/original.jpg"><img src="docs/images/showcase/blog/original.jpg" width="300" alt="Original personal blog with blue-purple gradients and article cards"></a></td>
       <td valign="top"><a href="docs/images/showcase/blog/01-feature.png"><img src="docs/images/showcase/blog/01-feature.png" width="300" alt="UI specifications for city illustrations: colors, typography, layout, and illustration details"></a></td>
       <td valign="top"><a href="docs/images/showcase/blog/01-preview.png"><img src="docs/images/showcase/blog/01-preview.png" width="300" alt="Redesigned personal blog with teal color blocks and city illustrations"></a></td>
     </tr>
     <tr>
-      <td valign="top"><strong>Personal Blog · Magazine Collage</strong><br><br><a href="docs/images/showcase/blog/original.jpg"><img src="docs/images/showcase/blog/original.jpg" width="300" alt="The same original personal blog"></a></td>
+      <td valign="top"><a href="docs/images/showcase/blog/original.jpg"><img src="docs/images/showcase/blog/original.jpg" width="300" alt="The same original personal blog"></a></td>
       <td valign="top"><a href="docs/images/showcase/blog/02-feature.png"><img src="docs/images/showcase/blog/02-feature.png" width="300" alt="UI specifications for magazine collage: oversized headlines, portrait photography, and hand-drawn marks"></a></td>
       <td valign="top"><a href="docs/images/showcase/blog/02-preview.jpg"><img src="docs/images/showcase/blog/02-preview.jpg" width="300" alt="Redesigned personal blog with portraits, pink and blue colors, and magazine collage"></a></td>
     </tr>
     <tr>
-      <td valign="top"><strong>Data Dashboard · Green and Gray</strong><br><br><a href="docs/images/showcase/dashboard/original.jpg"><img src="docs/images/showcase/dashboard/original.jpg" width="300" alt="Original data dashboard with a dark neon theme"></a></td>
+      <td valign="top"><a href="docs/images/showcase/dashboard/original.jpg"><img src="docs/images/showcase/dashboard/original.jpg" width="300" alt="Original data dashboard with a dark neon theme"></a></td>
       <td valign="top"><a href="docs/images/showcase/dashboard/01-feature.png"><img src="docs/images/showcase/dashboard/01-feature.png" width="300" alt="Dashboard UI specifications: green-gray colors, rounded containers, and ticket-style lists"></a></td>
       <td valign="top"><a href="docs/images/showcase/dashboard/01-preview.jpg"><img src="docs/images/showcase/dashboard/01-preview.jpg" width="300" alt="Redesigned data dashboard with a green-gray background, white content areas, and gold accents"></a></td>
     </tr>
     <tr>
-      <td valign="top"><strong>Personal Résumé · Retro Collage</strong><br><br><a href="docs/images/showcase/resume/original.jpg"><img src="docs/images/showcase/resume/original.jpg" width="300" alt="Original personal résumé with a gradient background and experience and skills cards"></a></td>
+      <td valign="top"><a href="docs/images/showcase/resume/original.jpg"><img src="docs/images/showcase/resume/original.jpg" width="300" alt="Original personal résumé with a gradient background and experience and skills cards"></a></td>
       <td valign="top"><a href="docs/images/showcase/resume/01-feature.png"><img src="docs/images/showcase/resume/01-feature.png" width="300" alt="UI specifications for retro collage: colorful sections, bold headlines, and print textures"></a></td>
       <td valign="top"><a href="docs/images/showcase/resume/01-preview.jpg"><img src="docs/images/showcase/resume/01-preview.jpg" width="300" alt="Redesigned personal résumé with yellow, orange, and green sections and retro photo collage"></a></td>
     </tr>
@@ -44,8 +50,7 @@ Upload a UI screenshot you like and let Codex extract its colors, typography, la
 
 Borrow just the colors and typography, or also select layouts, textures, and decorative elements, then specify where each should apply. Results vary with the reference image, selected features, and model.
 
-<details>
-<summary>View the workbench and an example export</summary>
+### View the workbench and an example export
 
 **Home page**
 
@@ -62,8 +67,6 @@ The reference sits in the center, surrounded by selectable design features. Colo
 The overview contains only your selected features. Give it to your AI assistant together with the unmarked original image and accompanying instructions.
 
 [![Exported PNG overview of selected design features](docs/images/selected-features.png)](docs/images/selected-features.png)
-
-</details>
 
 ## Quick Start
 
@@ -125,6 +128,8 @@ Click **Upload Reference Image (上传参考图)**, or drag an image into the up
 
 Choose a clear screenshot that shows the page structure and text hierarchy. A full-page screenshot is a good starting point.
 
+[![Upload a reference: choose an image or drag it into the upload area](docs/images/guide/01-upload.jpg)](docs/images/guide/01-upload.jpg)
+
 ### 2. Extract the design and select what you like
 
 Click **Extract Foundations and Distinctive Features (提炼基础与辨识特征)** and wait for the design cards to appear.
@@ -136,6 +141,8 @@ Click **Extract Foundations and Distinctive Features (提炼基础与辨识特�
 | Fine details | Additional details found with **Discover More Details (发现更多细节)**, ready to select as needed |
 
 Complete cards from the first extraction are selected by default; deselect anything you do not want. Newly discovered details are unselected by default. Hover over a card to locate it in the reference, or click **View Original (查看原图)** for a closer look.
+
+[![Extract and select: inspect the cards and choose the design features to apply](docs/images/guide/02-select.jpg)](docs/images/guide/02-select.jpg)
 
 ### 3. Try the design on a page
 
@@ -149,6 +156,8 @@ Click **Validate Selected Design (验证所选设计)**. Once it finishes, compa
 
 Each refinement is saved as a separate record. It uses the reference image and selected features from that run. If you change your card selections, click **Validate Selected Design (验证所选设计)** again.
 
+[![Validate the design: compare the original and redesigned pages side by side](docs/images/guide/03-validate.jpg)](docs/images/guide/03-validate.jpg)
+
 ### 4. Bring it into your own project
 
 You can also click **Preview and Export Images (预览并导出图片)** at the bottom to take these three items with you:
@@ -160,6 +169,8 @@ You can also click **Preview and Export Images (预览并导出图片)** at the 
 Give your AI assistant **both images and the accompanying instructions**, then add your project goal. For example:
 
 > Follow the accompanying instructions to apply my selected design features to this blog project. Keep the existing articles, navigation, and search, and create suitable visual assets around the blog's subject matter.
+
+[![Export your references: copy the instructions and download the overview PNG and unmarked original](docs/images/guide/04-export.jpg)](docs/images/guide/04-export.jpg)
 
 ## FAQ
 
