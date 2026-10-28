@@ -1,36 +1,46 @@
 {
   "name": "define-pretty",
-  "private": true,
+  "description": "A local visual reference workbench powered by your Codex CLI.",
   "version": "0.1.0",
   "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "bin": { "define-pretty": "bin/define-pretty.js" },
+  "exports": {
+    ".": { "types": "./dist/server/core.d.ts", "import": "./dist/server/core.js" },
+    "./core": { "types": "./dist/server/core.d.ts", "import": "./dist/server/core.js" }
+  },
+  "files": ["bin/", "dist/server/", "dist/shared/", "dist/visual-cards/", "dist/resources/", "dist/public/builtin-websites/"],
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build": "tsc --noEmit && vite build --outDir dist/visual-cards",
+    "build": "npm run check && node scripts/build.mjs",
     "dev:cards": "npm run dev",
     "build:cards": "npm run build",
     "start:cards": "npm start",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "start": "node bin/define-pretty.js",
+    "prepack": "npm run build",
+    "pack:release": "node scripts/pack-release.mjs",
     "test": "tsx --test server/*.test.ts",
     "test:onboarding": "node scripts/onboarding-smoke.mjs",
+    "test:package": "node scripts/package-smoke.mjs",
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "lucide-react": "^0.468.0",
+    "@types/express": "^5.0.3",
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "smol-toml": "^1.4.2",
-    "playwright": "^1.56.0",
-    "tsx": "^4.20.6",
-    "vite": "^7.1.12"
+    "playwright": "^1.56.0"
   },
   "devDependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "lucide-react": "^0.468.0",
+    "tsx": "^4.20.6",
+    "vite": "^7.1.12",
     "typescript": "^5.9.3",
     "@types/node": "^24.9.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
-    "@types/express": "^5.0.3",
     "@types/multer": "^2.0.0"
   }
 }

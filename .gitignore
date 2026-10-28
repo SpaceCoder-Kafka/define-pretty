@@ -9,3 +9,5 @@ dist/
 !.env.example
 !.env.sample
 .idea
+.release/
+*.tgz

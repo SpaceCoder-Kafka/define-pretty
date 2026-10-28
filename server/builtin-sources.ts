@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { BuiltinSourceInfo, FeatureTestSource } from '../shared/feature-test.ts';
 import { hashWebsite } from './codex.ts';
 import { fail } from './input.ts';
 import { safeFilePath } from './security.ts';
+import { bundledWebsiteDirectory } from './paths.ts';
 
-export const builtinWebsiteRoot = fileURLToPath(new URL('../public/builtin-websites/', import.meta.url));
+export const builtinWebsiteRoot = bundledWebsiteDirectory;
 export const builtinSourceCatalog: ReadonlyArray<BuiltinSourceInfo & { title: string }> = [
   { slug: 'dashboard', title: '数据 Dashboard', description: '指标卡、趋势图和订单表格，测试高密度数据界面。', style: 'neon', order: 0 },
   { slug: 'resume', title: '个人简历', description: '个人介绍、技能与经历时间线，测试信息层级和长文排版。', style: 'classic', order: 1 },

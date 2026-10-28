@@ -1,0 +1,83 @@
+name: Verify and package local app
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run test:package
+        env:
+          DEFINE_PRETTY_PACKAGE_BROWSER_TEST: '1'
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: define-pretty-release
+          path: |
+            .release/define-pretty.tgz
+            .release/SHA256SUMS
+          if-no-files-found: error
+          include-hidden-files: true
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: define-pretty-release
+          path: .release
+      - name: Check version and write release instructions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          const { version } = JSON.parse(await readFile('package.json', 'utf8'));
+          const tag = process.env.RELEASE_TAG;
+          if (tag !== `v${version}`) throw new Error('Release tag must match package.json version');
+          const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${tag}/define-pretty.tgz`;
+          await writeFile('.release/notes.md', [
+            '需要 Node.js >= 22.12。复制以下命令启动，浏览器会自动打开：', '',
+            '```sh', `npx --yes --package=${url} define-pretty`, '```', '',
+            '真实生成需安装并登录 Codex CLI；未登录可先体验内置使用指引。',
+            '截图验证需要 Chrome / Edge，或在启动命令末尾添加 --install-browser。',
+            '本地历史保存在固定用户数据目录；按 Ctrl+C 停止。',
+          ].join('\n'));
+          NODE
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          .release/define-pretty.tgz .release/SHA256SUMS
+          --verify-tag --draft --title "Define Pretty $RELEASE_TAG"
+          --notes-file .release/notes.md

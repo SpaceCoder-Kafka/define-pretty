@@ -2,6 +2,48 @@
 
 将参考 UI 截图转换为可勾选的视觉总览。参考图居中，基础规范、辨识特征与精细细节在四周紧凑分布，通过局部示例、布局比例、色板和关键参数帮助用户判断要采纳哪些设计。工作台与导出 PNG 共用摘要和排版规则，完整实施细节保留在配套指令与编辑器中。用户选择喜欢的设计，调整应用要求，再将总览图、无标记原图和配套指令交给 AI。参考图提供精确的风格依据，目标网站的内容与用途决定素材主题、叙事和表达，生成适合当前网站的新素材。
 
+## 快速启动
+
+需要 **Node.js 22.12 或更新版本**（含 npm / npx）。从本仓库的 GitHub Releases 下载 `define-pretty.tgz`，在文件所在目录执行：
+
+```sh
+npx --yes --package ./define-pretty.tgz define-pretty
+```
+
+发布说明也会提供直接使用 Release 下载地址的一条命令，无需手动下载、克隆源码或构建。发布包包含完整前后端、8 款内置网页和使用指引；运行时不会安装开发工具。
+
+启动后自动打开浏览器。默认从 `http://127.0.0.1:4193/` 打开工作台，预览使用独立端口；端口被占用时自动选择其他可用端口，以终端输出为准。保持终端运行，按 **Ctrl+C** 停止任务并保存记录。
+
+未安装或未登录 Codex 时，也可以先体验内置使用指引。真实提炼、补全和网页生成需要[安装 Codex CLI](https://developers.openai.com/codex/cli/)并运行 `codex login`；程序沿用本机配置和登录，不代为安装 Codex 或修改账号。安装或登录后重启工作台。
+
+截图、图片裁切和网页验证自动查找 Chrome、Edge 或已安装的 Chromium。缺少浏览器时，可使用同一个启动命令加 `--install-browser` 下载与当前包匹配的 Chromium：
+
+```sh
+npx --yes --package ./define-pretty.tgz define-pretty --install-browser
+```
+
+常用选项：
+
+| 选项 | 用途 |
+| --- | --- |
+| `--no-open` | 仅启动，不自动打开浏览器 |
+| `--doctor` | 检查 Codex、登录、模型列表和截图浏览器后退出；检查失败返回非零退出码 |
+| `--port 4301 --preview-port 4302` | 使用固定端口；占用时明确报错 |
+| `--data-dir /path/to/data` | 指定图片、卡片、任务历史的数据目录 |
+| `--help` | 查看全部选项 |
+
+选项放在启动命令的 `define-pretty` 后面，例如 `npx --yes --package ./define-pretty.tgz define-pretty --doctor`。
+
+正式启动使用固定的用户数据目录，与当前目录、npx 缓存和安装版本无关：
+
+| 系统 | 默认数据目录 |
+| --- | --- |
+| macOS | `~/Library/Application Support/Define Pretty` |
+| Linux | `${XDG_DATA_HOME:-~/.local/share}/define-pretty` |
+| Windows | `%LOCALAPPDATA%\Define Pretty` |
+
+更换版本或删除 npx 缓存不会删除历史。相同数据目录只允许一个实例；重复启动会提示已有实例，避免中断运行中的任务。模型调用仍需联网。
+
 ## 首次使用指引
 
 首次打开会自动开始快速体验，也可以从页头「使用指引」重新体验。示例带你走过上传入口、提炼、选择、网页验证和导出；无需上传、登录 Codex 或等待模型生成。下载、复制均可跳过；任意步骤按 Escape 或点击「跳过」退出，恢复原工作区。正在执行任务或打开编辑弹窗时，指引暂不启动。
@@ -35,12 +77,12 @@
 
 网页完成状态表示通过现有加载检查，实际视觉与交互效果仍需在对比预览中查看。
 
-## 本地运行
+## 源码开发
 
-需要 Node.js、已安装并登录的 Codex CLI，以及供图片裁切和网页验证使用的 Chrome、Edge 或 Chromium。
+需要 Node.js >= 22.12。在源码目录安装开发依赖并启动：
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -51,9 +93,59 @@ npm run build
 npm start
 ```
 
-默认控制台：http://127.0.0.1:4193/ 。静态网页预览使用 4194 端口。原有 `dev:cards`、`build:cards`、`start:cards` 命令保留为别名。
+`npm run dev` 保持使用仓库内 `.data/visual-cards` 和 Vite 热更新；不自动打开浏览器。`npm start` 使用已构建的发布入口、自动打开浏览器，并使用上面的固定用户数据目录。原有 `dev:cards`、`build:cards`、`start:cards` 命令保留为别名。
 
-`npm run dev` 的前端由 Vite 热更新，后端不会自动重启。修改 `server/` 或后端引用的 `shared/` 后，应等待在途任务结束，再停止并重新启动服务；只刷新浏览器不会让新的执行配置和提示词生效。
+如果希望生产入口继续使用当前仓库的旧数据，显式指定目录，无需复制或迁移：
+
+```sh
+npm start -- --data-dir .data/visual-cards --source-data-dir .data
+```
+
+`npm run dev` 的前端由 Vite 热更新，后端不会自动重启。修改 `server/` 或后端引用的 `shared/` 后，应等待在途任务结束，再停止并重新启动服务；只刷新浏览器不会让新的执行配置和提示词生效。生产入口需先重新构建。
+
+### 运行核心
+
+`server/core.ts` 负责服务生命周期、数据锁和任务管理；`server/cli.ts` 负责参数、环境检查、浏览器打开和退出信号。导入核心不会启动服务或注册全局信号处理。安装发布包后可以在自己的 Node.js 程序中调用：
+
+```js
+import { startLocalService } from 'define-pretty/core';
+
+const service = await startLocalService({ dataDirectory: '/absolute/path/to/data' });
+console.log(service.consoleOrigin, service.previewOrigin);
+// 宿主在退出时调用；会取消在途任务并保留中断记录。
+await service.shutdown();
+```
+
+核心仅监听 `127.0.0.1`，没有公网绑定选项。界面、示例和内置网页相对安装位置加载，不依赖调用者的工作目录；数据路径由宿主明确传入。
+
+### 打包与 GitHub 发布
+
+```sh
+npm run pack:release
+```
+
+生成 `.release/define-pretty.tgz` 和 `.release/SHA256SUMS`。打包前自动类型检查并构建；白名单只包含发布代码、前端与必要资源，排除本地数据、日志、测试和开发依赖。也支持标准 `npm pack`，会通过 `prepack` 自动构建。
+
+在本机直接验证这个发布包：
+
+```sh
+npx --yes --package ./.release/define-pretty.tgz define-pretty
+```
+
+将 `define-pretty.tgz` 和 `SHA256SUMS` 上传到 GitHub Release 后，用户可以一条命令下载并启动。以下 `OWNER/REPO` 替换为真实仓库名；无需 npm 账号或 npm registry 发布：
+
+```sh
+npx --yes --package=https://github.com/OWNER/REPO/releases/latest/download/define-pretty.tgz define-pretty
+```
+
+`.github/workflows/release.yml` 在推送、PR 和手动触发时执行 macOS / Linux 验证；推送与 `package.json` 版本一致的标签（如 `v0.1.0`）时，测试通过后创建带安装命令的 **GitHub Release 草稿**。维护者检查草稿后发布。手动触发仅构建并上传工作流产物。
+
+```sh
+npm test
+npm run test:package
+```
+
+`test:package` 重新打包，从仓库之外通过 npx 与仅含生产依赖的安装环境验证启动、类型声明、示例资源、重复启动保护、上传持久化和退出清理；使用隔离数据与模拟 Codex，不发起真实生成。设置 `DEFINE_PRETTY_PACKAGE_BROWSER_TEST=1` 会额外检查发布包中的真实浏览器界面。当前发布流程验证 macOS 和 Linux；Windows 路径与启动适配尚未经过同等端到端验证。
 
 ### 内置原始网页
 
@@ -89,12 +181,14 @@ npm test
 
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `DEFINE_PRETTY_PORT` | `4193` | 控制台端口 |
-| `DEFINE_PRETTY_PREVIEW_PORT` | `4194` | 独立静态预览端口 |
-| `DEFINE_PRETTY_DATA_DIR` | `.data/visual-cards` | 卡片、图片与验证记录 |
-| `DEFINE_PRETTY_DIST_DIR` | `dist/visual-cards` | 生产构建目录 |
-| `DEFINE_PRETTY_SOURCE_DATA_DIR` | `.data` | 首次导入验证原网页时只读访问的历史数据目录 |
+| `DEFINE_PRETTY_PORT` | 从 `4193` 查找可用端口 | 固定控制台端口；被占用时报错 |
+| `DEFINE_PRETTY_PREVIEW_PORT` | 从 `4194` 查找可用端口 | 固定独立静态预览端口；被占用时报错 |
+| `DEFINE_PRETTY_DATA_DIR` | 正式入口为用户数据目录；开发为仓库 `.data/visual-cards` | 卡片、图片与验证记录 |
+| `DEFINE_PRETTY_DIST_DIR` | 发布包内 `dist/visual-cards` | 覆盖已构建前端目录 |
+| `DEFINE_PRETTY_SOURCE_DATA_DIR` | 正式入口与数据目录相同；开发为仓库 `.data` | 首次导入旧实验原网页时只读访问的目录 |
 | `DEFINE_PRETTY_CHROME` | 自动查找 | 浏览器可执行文件路径 |
+
+CLI 参数优先于对应环境变量；只有明确指定的相对路径才相对当前工作目录解析。
 
 模型、provider 和 CLI 版本从本机 Codex 配置读取，复用现有登录。CLI 通过参数数组和 stdin 调用；卡片分析以只读沙箱运行，可使用只读图像分析命令与可用工具，保持原始输入不变。生成和修改网页以独立工作目录运行，并开启工作目录沙箱的网络访问；生成期间可以下载素材、安装依赖、构建和启动临时预览，也可截图对照参考图并自主修正。
 

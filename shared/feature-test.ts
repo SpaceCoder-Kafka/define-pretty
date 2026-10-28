@@ -1,6 +1,6 @@
-import type { FeatureBoard } from './feature-board';
-import type { ModelConfig, RunStatus, Usage } from './types';
-import type { DraftPreview, ExecutionProgress } from './execution-progress';
+import type { FeatureBoard } from './feature-board.ts';
+import type { ModelConfig, RunStatus, Usage } from './types.ts';
+import type { DraftPreview, ExecutionProgress } from './execution-progress.ts';
 export interface BuiltinSourceInfo {
   slug: string; description: string; style: 'classic' | 'neon'; order: number;
 }

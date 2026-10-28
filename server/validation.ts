@@ -1,15 +1,31 @@
 import { access, readdir } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
+import { chromium } from 'playwright';
 
 export async function chromeExecutable(): Promise<string | undefined> {
+  const canExecute = async (file: string) => {
+    try { await access(file, process.platform === 'win32' ? constants.F_OK : constants.X_OK); return true; }
+    catch { return false; }
+  };
+  if (process.env.DEFINE_PRETTY_CHROME) {
+    const file = path.resolve(process.env.DEFINE_PRETTY_CHROME);
+    if (!await canExecute(file)) throw new Error(`DEFINE_PRETTY_CHROME 指向的浏览器不可执行：${file}`);
+    return file;
+  }
   const paths = [
-    process.env.DEFINE_PRETTY_CHROME,
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-    '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    path.join(homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+    '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/snap/bin/chromium',
+    ...[process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter((root): root is string => !!root)
+      .flatMap(root => [path.join(root, 'Google/Chrome/Application/chrome.exe'), path.join(root, 'Microsoft/Edge/Application/msedge.exe')]),
+    chromium.executablePath(),
   ].filter((value): value is string => Boolean(value));
   for (const candidate of paths) {
-    try { await access(candidate); return candidate; } catch { /* Try the next installed browser. */ }
+    if (await canExecute(candidate)) return candidate;
   }
   return undefined;
 }

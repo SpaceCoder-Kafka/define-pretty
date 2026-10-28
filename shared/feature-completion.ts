@@ -1,7 +1,7 @@
-import type { FeatureRegion } from './feature-board';
-import type { LayoutDiagram } from './layout-diagram';
-import type { FeatureSpec } from './feature-spec';
-import type { ModelConfig, RunStatus, Usage } from './types';
+import type { FeatureRegion } from './feature-board.ts';
+import type { LayoutDiagram } from './layout-diagram.ts';
+import type { FeatureSpec } from './feature-spec.ts';
+import type { ModelConfig, RunStatus, Usage } from './types.ts';
 
 export interface FeatureCompletion {
   id: string; boardId: string; cardId: string; revision: number;
