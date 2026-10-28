@@ -52,6 +52,7 @@ try {
   await writeFile(path.join(fakeBin, opener), `#!/usr/bin/env node\nimport('node:fs').then(fs => fs.writeFileSync(${JSON.stringify(openerRecord)}, JSON.stringify(process.argv.slice(2))));\n`, { mode: 0o755 });
   const env = { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH}` };
   for (const key of Object.keys(env)) if (key.startsWith('DEFINE_PRETTY_')) delete env[key];
+  if (process.env.DEFINE_PRETTY_CHROME) env.DEFINE_PRETTY_CHROME = process.env.DEFINE_PRETTY_CHROME;
 
   // Exercise the exact npx/npm-exec tarball entry point without relying on a registry publication.
   const version = await npm(['exec', '--yes', '--cache', path.join(sandbox, 'cache'), `--package=${artifact}`, '--', 'define-pretty', '--version'], unrelated);
